@@ -1,7 +1,7 @@
 CC=gcc
 .PHONY : all
 
-all: utree-build utree-compress utree-search, utree-build_gg utree-search_gg
+all: utree-build utree-compress utree-search utree-build_gg utree-search_gg
 
 utree-build: itree.c ; $(CC) -m64 -std=gnu11 -Ofast -march=sandybridge itree.c -D BUILD -D PFBITS=24 -D IXTYPE=uint32_t -o utree-build
 

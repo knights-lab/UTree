@@ -9,7 +9,15 @@
 #include <math.h>
 #define _LARGEFILE64_SOURCE
 off_t lseek(int fd, off_t offset, int whence); 
+/* D options:
+ -D BUILD, BUILD_GG, SEARCH, SEARCH_GG, COMPRESS
+ NO_COUNT
+ IXTYPE=uint16_t, CNTTYPE=uint32_t, PACKSIZE=32[4,8,16,32,64]
+ PFBITS=16[24 max for laptops, 26-28 max tb servers]
+ SLACK=3, SPARSITY=4
 
+
+*/
 /*  RadixalTriecrobium. A tree utility for k-mer manipulation.
 ///////////////////// UTILITY FUNCTIONS //////////////////////
 Add a (numerical) word and its ix to a tree. Be sure to manage
@@ -2130,7 +2138,7 @@ int ixCol, int lblCol, int inc, int doGG) {
 			if (++z >= PACKSIZE) screenWord(utree, (WordIxPair){word,ix});
 		}
 	}
-	doGG ? checkUmbrellaU_GG : checkUmbrellaU(utree); // clear backlog
+	doGG ? checkUmbrellaU_GG(utree) : checkUmbrellaU(utree); // clear backlog
 	
 End:
 	fclose(fp); free(origLine); // purge buffers
@@ -2453,7 +2461,7 @@ inline IXTYPE XT_getIX32(UTree *utree, WTYPE word) {
 }
 
 int readSamplesFPdelim(UTree *ktree, FILE *fp, char delim);
-UTree *XT_read32(char *db) {
+UTree *XT_read32(char *db, char delim) {
 	FILE *dp = fopen(db,"rb");
 	if (!dp) { puts("Invalid DB file"); exit(0); }
 	uint64_t metadata[4] = {0};
@@ -2490,7 +2498,12 @@ UTree *XT_read32(char *db) {
 	// Prepare annotation
 	UTree *utree = calloc(1,sizeof *utree);
 	utree->sampStringSz = 10;
-	int annotated = readSamplesFPdelim(utree, dp, 0);
+	
+	//char *indie = malloc(1000000);
+	//while (indie = fgets(indie,1000000,dp))
+	//	puts(indie);
+	//exit(1);
+	int annotated = readSamplesFPdelim(utree, dp, delim);
 	if (!annotated) puts("No annotation found in tree file."); 
 	fclose(dp);
 	
@@ -2518,6 +2531,7 @@ UTree *XT_read32(char *db) {
 	initConverter();
 	utree->Dump = Dump;
 	utree->BinIx = BinIx;
+	puts("Tree read properly.");
 	return utree;
 }
 
@@ -3627,8 +3641,8 @@ void XT_cmp32(char *filename, char *outfile) {
 	
 	printf("Whole thing done. First word is: %s\n",KT_num2word(DR_WORD_AT(Dump,0)));
 	printf("Second word is: %s\n",KT_num2word(DR_WORD_AT(Dump,1)));
-	printf("Word ix 27982215 is: %s\n",KT_num2word(DR_WORD_AT(Dump,27982215))); //ATCGGAAAGAATCCCT
-	WTYPE wordOfInterest = DR_WORD_AT(Dump,27982215);
+	//printf("Word ix 27982215 is: %s\n",KT_num2word(DR_WORD_AT(Dump,27982215))); //ATCGGAAAGAATCCCT
+	//WTYPE wordOfInterest = DR_WORD_AT(Dump,27982215);
 	
 	/* size_t foundAt;
 	int bs2( char array[], size_t size, WTYPE key, size_t *index ){
@@ -3645,9 +3659,9 @@ void XT_cmp32(char *filename, char *outfile) {
 	
 	// Search for word in tree
 	 
-	char *foundHere = bsP(Dump, numNodes-1, wordOfInterest, DR_SZ);
-	printf("word of interest found with bsP? %d",foundHere);
-	printf(" ...with index of %llu [ix=%u]\n",DR_IXDIST(Dump,foundHere),DR_FIRST_IX(foundHere));
+	//char *foundHere = bsP(Dump, numNodes-1, wordOfInterest, DR_SZ);
+	//printf("word of interest found with bsP? %d",foundHere);
+	//printf(" ...with index of %llu [ix=%u]\n",DR_IXDIST(Dump,foundHere),DR_FIRST_IX(foundHere));
 	
 	// build N-character (2N-bit?) bin designators
 	#define DR_BITS 24
@@ -3665,13 +3679,13 @@ void XT_cmp32(char *filename, char *outfile) {
 	for (size_t i = DR_NUMBINS-2; i > u; --i) if (!BinIx[i]) BinIx[i] = BinIx[i+1];
 	
 	// Search for test word in bin range
-	WTYPE qprefix = DR_PREFIX(wordOfInterest);
+	/* WTYPE qprefix = DR_PREFIX(wordOfInterest);
 	size_t start_i = BinIx[qprefix], end_i = BinIx[qprefix+1];
 	if (start_i == end_i) puts("This aint gonna work."); 
 	else {
 		char *found = bsP(DR_ADDR_AT(Dump,start_i), end_i-start_i-1, wordOfInterest, DR_SZ);
 		printf("Found? %d At: %llu of taxon: %u \n",found, DR_IXDIST(Dump, found), DR_FIRST_IX(found));
-	}
+	} */
 	
 	// Compress and store the tree
 	int cmpStr = 3; // curSz; //2
@@ -3810,8 +3824,14 @@ int main(int argc, char *argv[]) { // for testing
 	#endif
 	#ifdef SEARCH
 	if (argc != 3) {puts("usage: xtree-search compTree.ctr fastaToSearch.fa"); exit(1); }
-	UTree *xtr = XT_read32(argv[1]); //("compTre.ctr");
+	UTree *xtr = XT_read32(argv[1],0); //("compTre.ctr");
 	XT_doSearch32(xtr,argv[2],"results.txt",0);
+	exit(0);
+	#endif
+	#ifdef SEARCH_GG
+	if (argc != 3) {puts("usage: xtree-searchGG compTreeGG.ctr fastaToSearch.fa"); exit(1); }
+	UTree *xtr = XT_read32(argv[1],';'); //("compTre.ctr");
+	XT_doSearch32(xtr,argv[2],"results.txt",7);
 	exit(0);
 	#endif
 	#ifdef BUILD
@@ -3849,74 +3869,23 @@ int main(int argc, char *argv[]) { // for testing
 	UT_writeSamples(myU, "sampNEW.txt");
 	return 0;
 	#endif
-	puts("Nothing to see here. Compile with -D BUILD, SEARCH, or COMPRESS");
+	#ifdef BUILD_GG
+	if (argc < 2) {puts("usage: utree-buildGG input_fasta.fa threads labelmap.db"); exit(1); }
+	int threads = 1;
+	#ifdef _OPENMP
+		threads = omp_get_max_threads();
+		if (argc > 2) threads = atoi(argv[2]);
+		omp_set_num_threads(threads);
+	#endif
+	char *filename = argv[1];
+	char *dbname = argv[3];
+	printf("Running with %d threads...\n",threads);
+	UTree *myU = UT_createTree(threads);
+	UT_parseSampFastaExternOSFA(myU,filename,dbname,0,1,2,1);
+	UT_writeTreeBinary(myU, "outNEW.cbt");
+	UT_writeSamples(myU, "sampNEW.txt");
+	return 0;
+	#endif
+	puts("Nothing to see here. Compile with -D BUILD, BUILD_GG, SEARCH, SEARCH_GG, COMPRESS");
 	exit(-1);
-TestTree:
-	puts("Reading tree...");
-	UTree *newU = UT_readTreeBinary("outNEW.cbt",threads,0);
-	//UT_writeTreeBinary(newU, "newU.cbt");
-	//UT_writeSamples(newU, "samp.txt");
-
-	//UT_readSamples(newU,"sampNEW.txt");
-	//UT_readSamplesDelim(newU,"sampNEW.txt",';');
-	//exit(1);
-	//UT_writeTreeBinary(newU, "newU.cbt");
-	//UT_writeSamples(newU, "samsU.txt");
-	//exit(3);
-	printf("Searching for test k-mers...\n");
-	//UT_searchQueries(newU,filename,"taxonomy_assigned.txt",7);
-	UT_searchQueries(newU,filename,"taxonomy_assigned.txt",0);
-	return 0;
-	
-	// First, create a tree with some amount of threads
-	KTree *myTree = KT_createTree(threads);
-	puts("Parsing input file.");
-	//KT_parseSampFasta(myTree, filename); // and parse in your file
-	//KT_sync(myTree);
-	//KT_simpleBalancePurge(myTree);
-	KT_parseSampFastaSparse(myTree, filename, 1); // last arg is speed. 1-inf, or 0.
-	
-	// Export the tree (if you want to load it in later):
-	puts("Exporting binary tree.");
-	//KT_writeTreeBinary(myTree, "savedTree.btr");
-	KT_writeTreeBinary(myTree, "savedTree.ctr");
-	//KT_writeTreeBinaryFull(myTree,"savedTreeF.ctr");
-	return 0;
-	// Or if you want to actually browse at the tree's sorted contents
-	//puts("Exporting text tree.");
-	//KT_writeTreeTxt(myTree, "savedTree_text.txt");
-	//KT_writeFullTreeTxt(myTree, "savedTree_fulltext.txt");
-	
-	// Also export the generated samples/species in the order they were indexed:
-	puts("Exporting index list.");
-	KT_writeSamples(myTree, "savedSamps.txt");
-
-	puts("Done with database creation."); return 0;
-
-ReadIn:
-	// ...some other time you can read them back in:
-	puts("Importing exported tree.");
-	//KTree *myNewerTree = KT_readTreeBinary("savedTree.btr", threads);
-	KTree *myNewerTree = KT_readTreeBinary("savedTree.ctr", threads);
-	
-	//puts("Exporting imported tree to text.");
-	KT_writeTreeTxt(myNewerTree,"outtxtTree.txt");
-	//KT_writeTreeTxt(myTree,"outtxtTree-old.txt");
-	//KT_writeFullTreeTxt(myTree,"fullTree.txt");
-	return 0;
-	
-	puts("Reading in samples.");
-	KT_readSamples(myNewerTree, "savedSamps.txt",0);
-
-	// And then perform whatever querying you like:
-	puts("Querying database for test K-mer.");
-	char kmer[33] = "AAAAACCAGGGCTTAACTCTGGGACTGCTTTT\0"; //"AGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCT\0";
-	size_t count;
-	IXTYPE myIX = KT_findIxCount(myNewerTree, KT_word2num(kmer), &count);
-	if (myIX != BAD_IX) 
-		printf("K-mer found at IX=%llu [Sample %s] %llu times!\n",myIX,
-			myNewerTree->SampStrings[myIX],count);
-	else 
-		printf("K-mer not found.\n");
-	return 0;
 }

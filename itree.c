@@ -1,3 +1,4 @@
+#define _LARGEFILE64_SOURCE
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -7,7 +8,7 @@
 //#include <unistd.h>
 #include <fcntl.h>
 #include <math.h>
-#define _LARGEFILE64_SOURCE
+
 off_t lseek(int fd, off_t offset, int whence); 
 /* D options:
  -D BUILD, BUILD_GG, SEARCH, SEARCH_GG, COMPRESS
@@ -93,6 +94,9 @@ The Load/save functions return 0 on failure.
 #ifdef USE_QSORT
 #include "qsort.h"
 #endif
+#ifndef DO_COUNT
+	#define NO_COUNT
+#endif
 #ifndef IXTYPE
 	#define IXTYPE uint16_t
 #endif
@@ -104,7 +108,7 @@ The Load/save functions return 0 on failure.
 #endif
 // Hash of trees
 #ifndef PFBITS
-	#define PFBITS 16
+	#define PFBITS 24
 #endif
 #if PFBITS>16
 	#define PFTYPE uint32_t
@@ -255,9 +259,8 @@ typedef struct {
 	size_t sampStringSz; // size of above array
 	size_t queuedClumps;
 	WordIxPair *Pairs; // Word and IX in here
-	void *BinIx;
+	uint64_t *BinIx;
 	char *Dump;
-	
 } UTree;
 
 /* typedef struct {
@@ -1737,7 +1740,7 @@ char * KT_num2word(WTYPE word) {
 size_t KT_parseSampFasta(KTree *ktree, char* filename) {
 	FILE *fp = fopen(filename, "rb");
 	if (fp == NULL) { puts("Invalid input FASTA"); return 0; }
-	size_t ns=0, LINELEN = 10000000; // 10MB lines
+	size_t ns=0, LINELEN = 268435456; // 100MB lines
 	char *line = malloc(LINELEN + 1); 
 	ktree->synced = 0;
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
@@ -1778,7 +1781,7 @@ size_t KT_parseSampFasta(KTree *ktree, char* filename) {
 size_t UT_parseSampFasta(UTree *utree, char* filename) {
 	FILE *fp = fopen(filename, "rb");
 	if (fp == NULL) { puts("Invalid input FASTA"); return 0; }
-	size_t ns=0, LINELEN = 10000000; // 10MB lines
+	size_t ns=0, LINELEN = 268435456; // 100MB lines
 	char *line = malloc(LINELEN + 1);  // ktree
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
 		char *src = line + 1; // sample name parsed to generate ix
@@ -1869,7 +1872,7 @@ size_t UT_parseSampFastaGG(UTree *utree, char* filename, char* labels, int doGG)
 	}
 	exit(2); */
 	--lines; // lowerbound on search function is max index, not total no
-	size_t ns=0, LINELEN = 10000000; // 10MB lines
+	size_t ns=0, LINELEN = 268435456; // 100MB lines
 	char *line = malloc(LINELEN + 1);
 	if (!doGG) while (++ns, line = fgets(line,LINELEN,fp)) {
 		char *src = line + 1; // sample name parsed to generate ix
@@ -1982,7 +1985,7 @@ size_t UT_parseSampFastaExternMod(UTree *utree, char* filename, char* labels, in
 	}
 	exit(2); */
 	--lines; // lowerbound on search function is max index, not total no
-	size_t ns=0, LINELEN = 10000000; // 10MB lines
+	size_t ns=0, LINELEN = 268435456; // 10MB lines
 	char *line = malloc(LINELEN + 1);
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
 		char *src = line + 1; // sample name parsed to generate ix
@@ -2066,7 +2069,7 @@ int ixCol, int lblCol, int inc, int doGG) {
 		lblSorted[i] = lblList[Pointers[i] - ixList];
 	}
 	--lines; // lowerbound on search function is max index, not total no
-	size_t ns=0, LINELEN = 10000000; // 10MB lines
+	size_t ns=0, LINELEN = 268435456; // 100MB lines
 	char *line = malloc(LINELEN + 1), *origLine = line;
 	//puts("Died."); exit(4);
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
@@ -2190,7 +2193,7 @@ WordCountPair * WCP_insert(WordCountPair *tree, WordCountPair **wcp, char *strin
 size_t UT_searchQueries(UTree *utree, char* filename, char* outfile, int doCollapse) {
 	FILE *fp = fopen(filename, "rb"), *fpo = fopen(outfile, "wb");
 	if (fp == NULL) { puts("Invalid input FASTA"); return 0; }
-	size_t ns=0, LINELEN = 10000000; // 10MB lines
+	size_t ns=0, LINELEN = 268435456; // 100MB lines
 	char *line = malloc(LINELEN + 1);  // ktree
 	size_t goodFinds = 0;
 	
@@ -2426,8 +2429,6 @@ const int SXBITS = PACKSIZE*2 - PXBITS;
 const size_t BINRANGE = 1 << PXBITS;
 
 WTYPE MASK = 0, PMASK = 0;
-//uint32_t *BINIX32 = 0;
-//uint32_t *BINIX64 = 0;
 
 inline char * xtSuffixBS( char array[], size_t size, WTYPE sx) {
 	char *p=array;
@@ -2451,9 +2452,11 @@ inline uint32_t uWBS32(uint32_t *ixList, uint32_t key, uint32_t low, uint32_t hi
 }
 
 inline IXTYPE XT_getIX32(UTree *utree, WTYPE word) {
-	uint32_t *BinIx = utree->BinIx;
+	uint64_t *BinIx = utree->BinIx;
 	WTYPE qprefix = PREFIX_L(word), qsuff = SUFFIX(word);
+	//printf("Prefix=%u, suffix = %u\n",(unsigned)qprefix,(unsigned)qsuff);
 	size_t start_i = BinIx[qprefix], end_i = BinIx[qprefix+1];
+	//printf("--> Start = %llu, end = %llu\n",start_i, end_i);
 	if (start_i == end_i) return BAD_IX;
 	
 	char *found = xtSuffixBS(ADDR_AT(utree->Dump,start_i), end_i-start_i-1, qsuff);
@@ -2483,8 +2486,12 @@ UTree *XT_read32(char *db, char delim) {
 	// Prepare the bin delimiters 
 	// See constants declared above
 	if (numNodes < UINT32_MAX) puts("Using 32-bit counters");
-	uint32_t *BinIx = malloc(NUMBINS*sizeof(*BinIx));
-	numRead = fread(BinIx, sizeof *BinIx,NUMBINS,dp);
+	else puts("Holey smokes, a tree of over 4 billion k-mers. Here goes...");
+	uint64_t *BinIx = malloc(NUMBINS*sizeof(*BinIx));
+	int ixSize = numNodes < UINT32_MAX ? sizeof(uint32_t) : sizeof(uint64_t);
+	numRead = 0;
+	for (size_t i = 0; i < NUMBINS; ++i) numRead += fread(&BinIx[i],ixSize,1,dp);
+	//numRead = fread(BinIx, sizeof *BinIx,NUMBINS,dp);
 	printf("%llu elements read.\n",numRead);
 	
 	// Read in the tree
@@ -2537,14 +2544,14 @@ UTree *XT_read32(char *db, char delim) {
 
 size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse) {
 	FILE *fp = fopen(filename, "rb"), *fpo = fopen(outfile, "wb");
-	if (fp == NULL) { puts("Invalid input FASTA"); return 0; }
-	size_t ns=0, LINELEN = 10000000; // 10MB lines
+	if (fp == NULL) { puts("Invalid input files"); exit(1); }
+	size_t ns=0, LINELEN = 268435456; // 100MB lines
 	char *line = malloc(LINELEN + 1);  // ktree
 	size_t goodFinds = 0;
 	
 	// Cache important variables
 	char *Dump = utree->Dump;
-	uint32_t *BinIx = utree->BinIx;
+	uint64_t *BinIx = utree->BinIx;
 	IXTYPE maxIX = utree->sampIX + 1;
 	char **SampStrings = utree->SampStrings;
 	uint8_t *semicolons = utree->semicolons;
@@ -2586,12 +2593,15 @@ size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse
 	#define XT_FINALIZE_WS() }
 	#define XT_WORD_SEARCH() \
 	/* search for words in tree */ \
+	/* printf("Conidering: \n"); */ \
 	size_t z = 0; for (size_t k = 0; k < length; ++k) { \
+		/* printf("%c,",*src++); continue; */ \
 		WTYPE motive = *(C2Xb+*src++); \
 		if (motive == 255) { word = 0, z=0, nextValid = PACKSIZE; continue; } \
 		word <<=2u, word += motive; \
 		if (++z >= PACKSIZE) { \
 			IXTYPE ix = XT_getIX32(utree, word); \
+			/* printf("%u ",(unsigned)ix); continue; */ \
 			if (ix < EMPTY_IX) { \
 				++foundUniq; \
 				XT_PREP_VOTE() \
@@ -2649,7 +2659,6 @@ size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse
 			if (!kingsMen++) fprintf(fpo,"%s",SampStrings[*AllTheKingsHorses]);
 			else {
 				for (int i = 0; i < kingsMen; ++i)
-					//++Hashes[(size_t)AllTheKingsHorses[i] % 196613];
 					++Hashes[AllTheKingsHorses[i]];
 				int most = 0, secondMost = 0;
 				IXTYPE mostIX, secondMostIX = BAD_IX;
@@ -2772,7 +2781,7 @@ size_t UT_parseSampFastaSparse(UTree *utree, char* filename, int speed, int spar
 	FILE *fp = fopen(filename, "rb");
 	if (fp == NULL) { puts("Invalid input FASTA"); return 0; }
 	//int rigor = 0; if (!speed) speed = 1, rigor = 1;
-	size_t ns=0, LINELEN = 10000000; // 10MB lines
+	size_t ns=0, LINELEN = 268435456; // 100MB lines
 	char *line = malloc(LINELEN + 1), *origLine = line;  // ktree
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
 		char *src = line + 1; // sample name parsed to generate ix
@@ -3023,7 +3032,7 @@ Finish:
 size_t KT_parseSampFastaSparse(KTree *ktree, char* filename, unsigned speed) {
 	FILE *fp = fopen(filename, "rb");
 	if (fp == NULL) { puts("Invalid input FASTA"); return 0; }
-	size_t ns=0, LINELEN = 10000000; // 10MB lines
+	size_t ns=0, LINELEN = 268435456; // 100MB lines
 	char *line = malloc(LINELEN + 1), *origLine = line; 
 	ktree->synced = 0;
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
@@ -3192,7 +3201,7 @@ size_t KT_parseIxFasta(KTree *ktree, char* filename) {
 	FILE *fp = fopen(filename, "rb");
 	if (fp == NULL) { puts("Invalid input FASTA"); return 0; }
 	ktree->synced = 0;
-	size_t ns=0, LINELEN = 10000000; // 10MB lines
+	size_t ns=0, LINELEN = 268435456; // 100MB lines
 	char *line = malloc(LINELEN + 1); 
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
 		char *src = line + 1; // sample name treated as ix
@@ -3318,10 +3327,10 @@ UTree * UT_createTree(int numThreads) {
 }
 
 #define READ_ADD_SAMPLES() { \
-	size_t ns=0, LINELEN = 10000000; \
+	size_t ns=0, LINELEN = 268435456; \
 	char *line = malloc(LINELEN + 1); line[LINELEN] = 0; \
 	while (++ns, line = fgets(line,LINELEN,fp)) { \
-		/* printf("%s",line); continue;  */\
+		/* printf("%s",line); continue; */ \
 		char *src = line; \
 		/* *src != '_' && *src != ' ' && */ \
 		while (*src != '\t') ++src; \
@@ -3376,7 +3385,7 @@ int KT_readSamples(KTree *ktree, char *filename, char delim) {
 }
 
 int readSamplesFPdelim(UTree *ktree, FILE *fp, char delim) {
-	if (!fp) { puts("Invalid input file"); return 0; } 
+	if (!fp) { puts("Invalid input file"); exit(1); } 
 	if (!delim) {
 		#define EXTRA_ADD() EXTRA_ADD_NORMAL() \
 			ktree->SampCnts[ktree->sampIX] = (uint64_t)atol(src+1);
@@ -3638,7 +3647,6 @@ void XT_cmp32(char *filename, char *outfile) {
 	int annotated = readSamplesFPdelim(utree, dp, 0);
 	if (!annotated) puts("No annotation found in tree file."); 
 	fclose(dp);
-	
 	printf("Whole thing done. First word is: %s\n",KT_num2word(DR_WORD_AT(Dump,0)));
 	printf("Second word is: %s\n",KT_num2word(DR_WORD_AT(Dump,1)));
 	//printf("Word ix 27982215 is: %s\n",KT_num2word(DR_WORD_AT(Dump,27982215))); //ATCGGAAAGAATCCCT
@@ -3665,14 +3673,16 @@ void XT_cmp32(char *filename, char *outfile) {
 	
 	// build N-character (2N-bit?) bin designators
 	#define DR_BITS 24
-	static const int bitsLeft = PACKSIZE*2 - DR_BITS, DR_NUMBINS = (1 << DR_BITS) + 1;
+	static const uint64_t bitsLeft = PACKSIZE*2 - DR_BITS, DR_NUMBINS = (1 << DR_BITS) + 1;
 	#define DR_PREFIX(x) ((x) >> bitsLeft)
 	if (numNodes < UINT32_MAX) puts("Using 32-bit counters");
-	uint32_t *BinIx = calloc(DR_NUMBINS,sizeof(*BinIx));
+	else puts("Holy smokes. Looks like we have over 4 billion k-mers here."),
+		puts("Please complain to the developer.\nTrying something anyway...");
+	uint64_t *BinIx = calloc(DR_NUMBINS,sizeof(*BinIx));
 	for (size_t i = 0; i < numNodes; ++i) {
-		PFTYPE v = DR_PREFIX(DR_WORD_AT(Dump,i));
+		uint32_t v = DR_PREFIX(DR_WORD_AT(Dump,i));
 		if (!BinIx[v]) BinIx[v] = i;
-		//printf("prefix=%llu\n",(PFTYPE)v);
+		//printf("prefix=%u\n",(uint32_t)v);
 	}
 	BinIx[DR_NUMBINS-1] = numNodes;
 	size_t u = 0; for (; !BinIx[u]; ++u); BinIx[u] = 0;
@@ -3697,9 +3707,11 @@ void XT_cmp32(char *filename, char *outfile) {
 	FILE *prefixPtrs = fopen(outfile,"wb");
 	if (!prefixPtrs) { puts("Invalid output filename"); exit(0); }
 	
-	//metadata[1] = 2; // bytes for prefix (2 * bits = 16 bits)
 	fwrite(metadata,sizeof *metadata,4,prefixPtrs);
-	fwrite(BinIx,sizeof *BinIx, DR_NUMBINS, prefixPtrs);
+	//fwrite(BinIx,sizeof *BinIx, DR_NUMBINS, prefixPtrs);
+	int ixSize = numNodes < UINT32_MAX ? sizeof(uint32_t) : sizeof(uint64_t);
+	for (size_t i = 0; i < DR_NUMBINS; ++i) fwrite(&BinIx[i],ixSize,1,prefixPtrs);
+	//for (size_t i = 0; i < DR_NUMBINS; ++i) printf("%llu\t%llu\n",i,BinIx[i]);
 	for (size_t i = 0; i < numNodes; ++i) {
 		fwrite(DR_ADDR_AT(Dump,i),1,cmpSz,prefixPtrs);
 		fwrite(DR_ADDR_AT(Dump,i)+sizeof(WTYPE),sizeof(IXTYPE),1,prefixPtrs);
@@ -3794,65 +3806,41 @@ int KT_writeFullTreeTxt(KTree *ktree, char* filename) {
 	return 1;
 }
 
-// usage: RadixalTriecrobium inSeqs.fna [threads]
-int main(int argc, char *argv[]) { // for testing
-	//printf("Size of KMerX = %u\n",sizeof(KMerX)); // return 0;
-	//printf("KMerX size=%u, KMerY size=%u\n",sizeof(KMerX),sizeof(KMerY)); return;
-	//UT_parseSampFastaExtern(UTree *utree, char* filename, char* labels);
-	/* const int IXIX = sizeof(WTYPE) / sizeof(IXTYPE);
-	const int SZ = sizeof(WTYPE) + sizeof(IXTYPE);
-	const int SZ3 = SZ*3;
-	typedef union {
-		//WTYPE word;
-		char a[SZ];
-		//IXTYPE ix[IXIX];
-	} BinRecord;
-	char W[18] = "AAAAAABBBBBBCCCCC\0"; //= {0};
-	printf("sizeof BinRecord: %u [IXIX=%d], w: %u\n",sizeof(BinRecord),IXIX,sizeof(W)); 
-	printf("W is: %s\n",W);
-	WTYPE *W_word = (WTYPE *)W;
-	//CNTTYPE *W_cnt = W + sizeof(WTYPE);
-	IXTYPE *W_ix = (IXTYPE *)(W + sizeof(WTYPE));
-	*W_word = KT_word2num("ACTGCCAGACCTTCAG\0");
-	printf("W is: %s\n",W);
-	*W_ix = 404;
-	printf("W is: %s\n",W); */
+// usage: RadixalTriecrobium [see module usage]
+int main(int argc, char *argv[]) { 
 	#ifdef COMPRESS
-	if (argc != 3) {puts("usage: xtree-compress preTree.cbt, compTree.ctr"); exit(1); }
+	if (argc != 3) {puts("usage: xtree-compress preTree.ubt compTree.ctr"); exit(1); }
 	XT_cmp32(argv[1],argv[2]); //("outNEW.cbt","compTre.ctr");
 	exit(0);
 	#endif
 	#ifdef SEARCH
-	if (argc != 3) {puts("usage: xtree-search compTree.ctr fastaToSearch.fa"); exit(1); }
+	if (argc != 4) {puts("usage: xtree-search compTree.ctr fastaToSearch.fa output.txt"); exit(1); }
 	UTree *xtr = XT_read32(argv[1],0); //("compTre.ctr");
-	XT_doSearch32(xtr,argv[2],"results.txt",0);
+	XT_doSearch32(xtr,argv[2],argv[3],0);
 	exit(0);
 	#endif
 	#ifdef SEARCH_GG
-	if (argc != 3) {puts("usage: xtree-searchGG compTreeGG.ctr fastaToSearch.fa"); exit(1); }
+	if (argc != 4) {puts("usage: xtree-searchGG compTreeGG.ctr fastaToSearch.fa output.txt"); exit(1); }
 	UTree *xtr = XT_read32(argv[1],';'); //("compTre.ctr");
-	XT_doSearch32(xtr,argv[2],"results.txt",7);
+	XT_doSearch32(xtr,argv[2],argv[3],7);
 	exit(0);
 	#endif
 	#ifdef BUILD
-	if (argc < 2) {puts("usage: utree-build input_fasta.fa threads labelmap.db"); exit(1); }
-
+	if (argc < 4) {puts("usage: utree-build input_fasta.fa labels.map output.ubt [threads]"); exit(1); }
+	char *filename = argv[1], *dbname = argv[2], *outname = argv[3];
 	int threads = 1;
 	#ifdef _OPENMP
 		threads = omp_get_max_threads();
-		if (argc > 2) threads = atoi(argv[2]);
+		if (argc > 4) threads = atoi(argv[4]);
 		omp_set_num_threads(threads);
+		printf("Running with %d threads...\n",threads);
+	#else
+		puts("Multithreading is disabled in this build.");
 	#endif
 	
-	char *filename = "seqs.fna\0";
-	if (argc > 1) filename = argv[1];
-	printf("Running with %d threads...\n",threads);
-	//goto ReadIn;
 	UTree *myU = UT_createTree(threads);
 		
 	//UT_parseSampFastaExtern(myU,filename,"db/99_otu_taxonomy.txt",1);
-	char *dbname = "db/img_taxonomy.txt";
-	if (argc > 3) dbname = argv[3];
 	UT_parseSampFastaExternOSFA(myU,filename,dbname,0,1,PACKSIZE/2,0); // 0,2 for ixcol, ixlab in img
 	//UT_parseSampFastaGG(myU,filename,dbname,1);
 	//UT_parseSampFastaExternOSFA(myU,filename,dbname,0,1,2,1);
@@ -3861,31 +3849,36 @@ int main(int argc, char *argv[]) { // for testing
 	//UT_parseSampFasta(myU,filename);
 	//UT_parseSampFastaSparse(myU,filename,1,1); // arg 1 = sparsity. 0 = super fast, 1 and up is decreasing stringency, arg 2 = whether to resparsify
 	//UT_parseSampFasta(myU,filename);
-	UT_writeTreeBinary(myU, "outNEW.cbt");
+	UT_writeTreeBinary(myU, outname);
 	
 	//if (!myU->SampCnts) 
 	//	myU->SampCnts = calloc(myU->sampIX + 1,sizeof(*myU->SampCnts));
 	
-	UT_writeSamples(myU, "sampNEW.txt");
+	UT_writeSamples(myU, "log_build.txt");
 	return 0;
 	#endif
+	
 	#ifdef BUILD_GG
-	if (argc < 2) {puts("usage: utree-buildGG input_fasta.fa threads labelmap.db"); exit(1); }
+	if (argc < 4) {puts("usage: utree-buildGG input_fasta.fa labels.map output.ubt [threads]"); exit(1); }
+	char *filename = argv[1], *dbname = argv[2], *outname = argv[3];
 	int threads = 1;
 	#ifdef _OPENMP
 		threads = omp_get_max_threads();
-		if (argc > 2) threads = atoi(argv[2]);
+		if (argc > 4) threads = atoi(argv[4]);
 		omp_set_num_threads(threads);
+		printf("Running with %d threads...\n",threads);
+	#else
+		puts("Multithreading is disabled in this build.");
 	#endif
-	char *filename = argv[1];
-	char *dbname = argv[3];
-	printf("Running with %d threads...\n",threads);
 	UTree *myU = UT_createTree(threads);
+	
 	UT_parseSampFastaExternOSFA(myU,filename,dbname,0,1,2,1);
-	UT_writeTreeBinary(myU, "outNEW.cbt");
-	UT_writeSamples(myU, "sampNEW.txt");
+	UT_writeTreeBinary(myU, outname);
+	UT_writeSamples(myU, "log_buildGG.txt");
 	return 0;
 	#endif
-	puts("Nothing to see here. Compile with -D BUILD, BUILD_GG, SEARCH, SEARCH_GG, COMPRESS");
-	exit(-1);
+	
+	puts("Nothing to see here.");
+	puts("Compile with one of: -D BUILD, BUILD_GG, SEARCH, SEARCH_GG, COMPRESS");
+	exit(1);
 }

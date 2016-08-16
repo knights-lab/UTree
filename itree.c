@@ -1,4 +1,5 @@
 #define _LARGEFILE64_SOURCE
+#define _FILE_OFFSET_BITS 64
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -2019,11 +2020,12 @@ size_t UT_parseSampFastaExternMod(UTree *utree, char* filename, char* labels, in
 size_t UT_parseSampFastaExternOSFA(UTree *utree, char* filename, char* labels, 
 int ixCol, int lblCol, int inc, int doGG) {
 	FILE *fp = fopen(filename, "rb"), *fp2 = fopen(labels, "rb");
-	if (fp == 0 || fp2 == 0) { puts("Invalid input FASTA"); return 0; }
+	if (fp == 0 || fp2 == 0) { puts("Invalid input file(s)"); exit(1); }
 	// read in the second file
 	fseek(fp2,0,SEEK_END); size_t filesz = ftell(fp2); rewind(fp2);
 	char *dump = malloc(filesz+1); fread(dump,filesz,1,fp2); fclose(fp2);
 	dump[filesz] = 0;
+	if (!filesz) {puts("Input map empty."); exit(1);}
 	size_t lines = 0;
 	char *ptr = dump; do if (*ptr == '\n') ++lines; while (*++ptr);
 	//printf("Taxonomy labels (raw) = %llu\n",lines); 
@@ -2071,25 +2073,29 @@ int ixCol, int lblCol, int inc, int doGG) {
 	--lines; // lowerbound on search function is max index, not total no
 	size_t ns=0, LINELEN = 268435456; // 100MB lines
 	char *line = malloc(LINELEN + 1), *origLine = line;
-	//puts("Died."); exit(4);
+	puts("Starting sequence parse");
+	
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
+		//printf("%s",line); continue;
 		char *src = line + 1; // sample name parsed to generate ix
 		while (*src != '_' && *src != ' ' && *src != '\n') ++src; 
 		memset(src,'\0',1); 
+		//puts("looped"); continue;
 		size_t pre_ix = crBST(line+1,lines, ixSorted); 
+		//printf("looped preIX=%llu \n",pre_ix); continue;
 		//fprintf(outfile,"Tag is %s, which maps to %llu\n",line+1,pre_ix);
 		if (pre_ix == -1) {puts("Error: taxon map incomplete"); exit(4);}
 		IXTYPE ix = addSampleU(utree,lblSorted[pre_ix]);
 		//fprintf(outfile,"Tag is %s, which maps to %s, which is ix %u\n",line+1,lblSorted[pre_ix],ix);
 		if (!(line = fgets(line,LINELEN,fp))) // encode sequence
-			{ puts("Error reading file."); return 0; }
+			{ puts("Error: FASTA malformatted"); return 0; }
 		src = line;
 		register size_t length = strlen(src);
 		if (src[length-1] == '\n') --length; // lop off newline(s)
 		if (src[length-1] == '\r') --length; // supports every platform!
 		WTYPE word = 0;
 		//exit(3);
-		//continue;
+		//puts("looped"); continue;
 		// add clumps and indices to tree
 		size_t z = 0, x = 0; for (int k = 0; k < length; ++k) {
 			WTYPE motive = *(C2Xb+*src++);
@@ -2099,6 +2105,12 @@ int ixCol, int lblCol, int inc, int doGG) {
 		}
 		if (z) addWord(utree,word,ix);
 	}
+	size_t totNodes = 0;
+	#pragma omp parallel for reduction(+:totNodes)
+	for (size_t i = 0; i < KHASH_SIZE; ++i) 
+		totNodes += utree->NumsInserted[i];
+	printf("Done with sequence parse: %llu k-mers made\n",totNodes);
+	if (!totNodes) {puts("Error: no k-mers. Bad input/params!"); exit(2); }
 	if (inc == 1) 
 		goto End;
 	// Round 2: double-check and nullify
@@ -3839,18 +3851,18 @@ int main(int argc, char *argv[]) {
 	#endif
 	
 	UTree *myU = UT_createTree(threads);
-		
+	puts("Tree initialized.");
 	//UT_parseSampFastaExtern(myU,filename,"db/99_otu_taxonomy.txt",1);
 	UT_parseSampFastaExternOSFA(myU,filename,dbname,0,1,PACKSIZE/2,0); // 0,2 for ixcol, ixlab in img
 	//UT_parseSampFastaGG(myU,filename,dbname,1);
 	//UT_parseSampFastaExternOSFA(myU,filename,dbname,0,1,2,1);
-	
+	puts("File parsed.");
 	//UT_parseSampFastaQIIME(myU,filename,"94_otu_taxonomy.txt");
 	//UT_parseSampFasta(myU,filename);
 	//UT_parseSampFastaSparse(myU,filename,1,1); // arg 1 = sparsity. 0 = super fast, 1 and up is decreasing stringency, arg 2 = whether to resparsify
 	//UT_parseSampFasta(myU,filename);
 	UT_writeTreeBinary(myU, outname);
-	
+	puts("Tree written.");
 	//if (!myU->SampCnts) 
 	//	myU->SampCnts = calloc(myU->sampIX + 1,sizeof(*myU->SampCnts));
 	

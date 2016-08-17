@@ -2078,7 +2078,7 @@ int ixCol, int lblCol, int inc, int doGG) {
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
 		//printf("%s",line); continue;
 		char *src = line + 1; // sample name parsed to generate ix
-		while (*src != '_' && *src != ' ' && *src != '\n') ++src; 
+		while (*src != ' ' && *src != '\n') ++src; 
 		memset(src,'\0',1); 
 		//puts("looped"); continue;
 		size_t pre_ix = crBST(line+1,lines, ixSorted); 
@@ -2131,7 +2131,7 @@ int ixCol, int lblCol, int inc, int doGG) {
 	
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
 		char *src = line + 1; // sample name parsed to generate ix
-		while (*src != '_' && *src != ' ' && *src != '\n') ++src; 
+		while (*src != ' ' && *src != '\n') ++src; 
 		memset(src,'\0',1); 
 		//IXTYPE ix = addSampleUd(utree,line+1); 
 		size_t pre_ix = crBST(line+1,lines, ixSorted); 

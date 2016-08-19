@@ -2023,37 +2023,62 @@ int ixCol, int lblCol, int inc, int doGG) {
 	if (fp == 0 || fp2 == 0) { puts("Invalid input file(s)"); exit(1); }
 	// read in the second file
 	fseek(fp2,0,SEEK_END); size_t filesz = ftell(fp2); rewind(fp2);
-	char *dump = malloc(filesz+1); fread(dump,filesz,1,fp2); fclose(fp2);
+	char *dump = malloc(filesz+1); if (!dump) {puts("Map err."); exit(2);}
+	fread(dump,filesz,1,fp2); fclose(fp2);
 	dump[filesz] = 0;
-	if (!filesz) {puts("Input map empty."); exit(1);}
+	printf("Parsed map. %llu bytes",filesz);
+	if (!filesz) {puts("\nInput map empty."); exit(1);}
 	size_t lines = 0;
 	char *ptr = dump; do if (*ptr == '\n') ++lines; while (*++ptr);
+	if (*(ptr-1)!='\n') ++lines;
+	printf(", %llu lines.\n",lines);
 	//printf("Taxonomy labels (raw) = %llu\n",lines); 
 	char **lblList = malloc(sizeof(*lblList)*lines);
 	char **ixList = malloc(sizeof(*ixList)*lines);
+	if (!lblList || !ixList) {puts("Map list err."); exit(2);}
 	//FILE *outfile = fopen("outfile_temp_db.txt","wb");
 	ptr = dump; 
 	void (*addWord)(UTree *, WTYPE, IXTYPE) = doGG ? 
 		&UT_addWordIxGG : &UT_addWordIx, (*screenWord)(UTree *, WordIxPair) =
 		doGG ? &checkAndNullU_GG : &checkAndNullU; // dynamic recompilation
-	if (ixCol < lblCol) for (size_t i = 0; i < lines; ++i) {
-		for (int j=0; j < ixCol; ++j) {
-			while (*++ptr != '\t'); *ptr++ = 0; // skip to correct tab & nullify
+	if (ixCol < lblCol) for (size_t i = 0; i < lines; ++i) { //default
+		int j = 0;
+		for (; j < ixCol; ++j) {
+			//puts("Called non-default");
+			while (*++ptr != '\t') if (!*ptr) {printf("Err tab0: %llu\n",i); exit(2);}; 
+			*ptr++ = 0; // skip to correct tab & nullify
+		}
+		if (*ptr == '\n' || *ptr == '\r') { 
+			printf("ERROR: map line %llu\nBlank indices are NOT ALLOWED.\n",i);
+			exit(2);
 		}
 		ixList[i] = ptr; // store first string as key
-		for (int j = 0; j < lblCol; ++j) {
-			while (*++ptr != '\t'); *ptr++ = 0; // skip to correct tab & nullify
+		if (!ptr) {printf("Stored null in ixList: %llu\n",i); exit(2);}
+		for (; j < lblCol; ++j) {
+			if (*ptr == '\t') {printf("map: extra tab, line %llu\n",i); exit(2);}
+			while (*++ptr != '\t') if (!*ptr) {printf("Err tab1: %llu\n",i); exit(2);}; 
+			*ptr++ = 0; // nullify after tab reached
+		}
+		if (*ptr == '\n' || *ptr == '\r') { 
+			printf("\nERROR: map line %llu\nBlank labels are NOT ALLOWED.\n",i+1);
+			exit(2);
 		}
 		lblList[i] = ptr; // store second string as taxon
-		while (*++ptr != '\n') if (*ptr=='\t') *ptr = 0; // get to end of line
-		*ptr++ = 0; // replace newline with null
+		if (!ptr) {printf("Stored null in lblList: %llu\n",i); exit(2);}
+		while (*ptr != '\n') { //} && *ptr != '\t') {
+			if (!*ptr) {printf("Err line counter: %llu\n",i); exit(2);}
+			if (*ptr == '\r' || *ptr == '\t') *ptr = 0;
+			ptr++;
+		}
+		if (!*ptr) {printf("Malformatted map before line %llu",i+1); exit(2);}
+		*ptr++=0;
 	}
-	else for (size_t i = 0; i < lines; ++i) {
-		for (int j=0; j < lblCol; ++j) {
+	else for (size_t i = 0; i < lines; ++i) { // TODO: update this?
+		int j=0; for (; j < lblCol; ++j) {
 			while (*++ptr != '\t'); *ptr++ = 0; // skip to correct tab & nullify
 		}
 		lblList[i] = ptr; // store first string as key
-		for (int j = 0; j < ixCol; ++j) {
+		for (; j < ixCol; ++j) {
 			while (*++ptr != '\t'); *ptr++ = 0; // skip to correct tab & nullify
 		}
 		ixList[i] = ptr; // store second string as taxon
@@ -2062,19 +2087,21 @@ int ixCol, int lblCol, int inc, int doGG) {
 	}
 	// sorting by pointers is done here
 	char ***Pointers = malloc(sizeof(*Pointers)*lines);
+	if (!Pointers) {puts("Map ptr err."); exit(2);}
 	for (size_t i = 0; i < lines; ++i) Pointers[i] = &ixList[i];
 	qsort(Pointers,lines,sizeof(*Pointers),xcmpP);
 	char **ixSorted = malloc(sizeof(*ixSorted)*lines),
 		 **lblSorted = malloc(sizeof(*lblSorted)*lines);
+	if (!ixSorted || !lblSorted) {puts("Map srtd err."); exit(2);}
 	for (size_t i = 0; i < lines; ++i) {
 		ixSorted[i] = *Pointers[i];
 		lblSorted[i] = lblList[Pointers[i] - ixList];
 	}
+	//free(Pointers), free(ixList), free(lblList);
 	--lines; // lowerbound on search function is max index, not total no
 	size_t ns=0, LINELEN = 268435456; // 100MB lines
 	char *line = malloc(LINELEN + 1), *origLine = line;
-	puts("Starting sequence parse");
-	
+	if (!line) {puts("FASTA parse: memory error."); exit(2);}
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
 		//printf("%s",line); continue;
 		char *src = line + 1; // sample name parsed to generate ix
@@ -2088,7 +2115,7 @@ int ixCol, int lblCol, int inc, int doGG) {
 		IXTYPE ix = addSampleU(utree,lblSorted[pre_ix]);
 		//fprintf(outfile,"Tag is %s, which maps to %s, which is ix %u\n",line+1,lblSorted[pre_ix],ix);
 		if (!(line = fgets(line,LINELEN,fp))) // encode sequence
-			{ puts("Error: FASTA malformatted"); return 0; }
+			{ printf("Error parsing FASTA (1pass): %llu",ns); exit(2); }
 		src = line;
 		register size_t length = strlen(src);
 		if (src[length-1] == '\n') --length; // lop off newline(s)
@@ -2097,7 +2124,7 @@ int ixCol, int lblCol, int inc, int doGG) {
 		//exit(3);
 		//puts("looped"); continue;
 		// add clumps and indices to tree
-		size_t z = 0, x = 0; for (int k = 0; k < length; ++k) {
+		size_t z = 0, x = 0; for (size_t k = 0; k < length; ++k) {
 			WTYPE motive = *(C2Xb+*src++);
 			if (motive == 255) { word = 0, x=0,z=0; continue; }
 			word <<=2u, word += motive;
@@ -2138,7 +2165,7 @@ int ixCol, int lblCol, int inc, int doGG) {
 		IXTYPE ix = addSampleUd(utree,lblSorted[pre_ix]);
 		
 		if (!(line = fgets(line,LINELEN,fp))) // encode sequence
-			{ puts("Error reading file."); return 0; }
+			{ printf("Error parsing FASTA (2pass): %llu",ns); exit(2); }
 		src = line;
 		register size_t length = strlen(src);
 		if (src[length-1] == '\n') --length; // lop off newline(s)
@@ -2146,7 +2173,7 @@ int ixCol, int lblCol, int inc, int doGG) {
 		WTYPE word = 0;
 		
 		// add clumps and indices to tree
-		size_t z = 0; for (int k = 0; k < length; ++k) {
+		size_t z = 0; for (size_t k = 0; k < length; ++k) {
 			WTYPE motive = *(C2Xb+*src++);
 			if (motive == 255) { word = 0, z=0; continue; }
 			word <<=2u, word += motive;

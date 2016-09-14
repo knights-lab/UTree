@@ -1463,7 +1463,9 @@ int main(int argc, char *argv[]) {
 	UT_writeTreeBinary(myU, outname);
 	puts("Tree written.");
 	
-	UT_writeSamples(myU, "log_build.txt");
+	char *logFN = calloc(4097,1);
+	sprintf(logFN,"%s.log",outname);
+	UT_writeSamples(myU, logFN);
 	return 0;
 	#endif
 	
@@ -1483,7 +1485,9 @@ int main(int argc, char *argv[]) {
 	
 	UT_parseSampFastaExternOSFA(myU,filename,dbname,0,1,2,1);
 	UT_writeTreeBinary(myU, outname);
-	UT_writeSamples(myU, "log_buildGG.txt");
+	char *logFN = calloc(4097,1);
+	sprintf(logFN,"%s.gg.log",outname);
+	UT_writeSamples(myU, logFN);
 	return 0;
 	#endif
 	

@@ -1,12 +1,14 @@
 ### Installation
 
+This set of installation instructions are for MacOSX and Linux users only.
+
 ```
 # Clone UTree
 git clone https://github.com/knights-lab/UTree.git
 
 # Make UTree
 cd UTree
-make
+make install
 ```
 
 Instructions:

@@ -1,6 +1,9 @@
-### Installation
+### Download and run
+Download the zip file with the binaries for your system. Unix (Mac and Linux) users: You may also have to set the files as executable with chmod +x utree-*
 
-This set of installation instructions are for MacOSX and Linux users only.
+### Compilation (optional, only if you want to adjust internal parameters)
+
+This set of compilation instructions are for Windows (msys/BASH environment) and Linux users only. Mac users will not be able to run these commands unless they have a real version of gcc (not the default clang). 
 
 ```
 # Clone UTree
@@ -8,7 +11,7 @@ git clone https://github.com/knights-lab/UTree.git
 
 # Make UTree
 cd UTree
-make install
+make
 ```
 
 Instructions:

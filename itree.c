@@ -721,7 +721,7 @@ int ixCol, int lblCol, int inc, int doGG) {
 		size_t pre_ix = crBST(line+1,lines, ixSorted); 
 		//printf("Line %llu, preIX=%llu \n",ns,pre_ix);
 		//fprintf(outfile,"Tag is %s, which maps to %llu\n",line+1,pre_ix);
-		if (pre_ix == -1) {puts("Error: taxon map incomplete"); exit(4);}
+		if (pre_ix == -1) {printf("Error: taxon map incomplete (line %u)\n",ns); exit(4);}
 		IXTYPE ix = addSampleU(utree,lblSorted[pre_ix]);
 		//fprintf(outfile,"Tag is %s, which maps to %s, which is ix %u\n",line+1,lblSorted[pre_ix],ix);
 		if (!(line = fgets(line,LINELEN,fp))) // encode sequence

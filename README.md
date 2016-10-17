@@ -1,3 +1,14 @@
+### Installation
+
+```
+# Clone UTree
+git clone https://github.com/knights-lab/UTree.git
+
+# Make UTree
+cd UTree
+make
+```
+
 Instructions:
 - Needs linearized, newline terminated (including trailing newline at end of file) FASTA format and a simple tab delimited map of [header] to [taxon].
 - Mapping file specifics: [Taxon] can be any string without tab or null or newline. If doing rank-flexible (MAKE_GG or SEARCH_GG), it additionally needs to exactly respect the greengenes formatting standard including single-letter taxon labels, underscores, and spaces after the delimiting semicolons. A single label can map to multiple fasta sequences as long as the fasta sequences share a name (up to the terminating delimiter discussed below). It does not need to be sorted or deduplicated.

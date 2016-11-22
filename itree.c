@@ -1088,7 +1088,7 @@ size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse
 					&& secondMostIX != mostIX) ) --goodFinds; */
 				if ( most < TOLERANCE_THRESHOLD || most < SLACK*secondMost) --goodFinds;
 				else 
-					fprintf(fpo,"%s\t%d",SampStrings[mostIX],(double)1-(double)secondMost/most);
+					fprintf(fpo,"%s\t%f",SampStrings[mostIX],(double)1-(double)secondMost/most);
 			}
 		}
 		fprintf(fpo,"\n");

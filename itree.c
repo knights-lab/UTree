@@ -1,3 +1,7 @@
+/* UTree v1.1b -- ultrafast unique k-mer mapper by Gabe. 
+Copyright 2015-2017 Knights Lab, Regents of the University of Minnesota.
+This software is released under the GNU Affero General Public License (AGPL) v3.0.
+*/
 #define _LARGEFILE64_SOURCE
 #define _FILE_OFFSET_BITS 64
 #include <stdio.h>
@@ -6,7 +10,6 @@
 #include <string.h>
 #include <time.h>
 #include <sys/types.h> 
-//#include <unistd.h>
 #include <fcntl.h>
 #include <math.h>
 
@@ -1088,7 +1091,7 @@ size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse
 					&& secondMostIX != mostIX) ) --goodFinds; */
 				if ( most < TOLERANCE_THRESHOLD || most < SLACK*secondMost) --goodFinds;
 				else 
-					fprintf(fpo,"%s\t%f",SampStrings[mostIX],(double)1-(double)secondMost/most);
+					fprintf(fpo,"%s\t%f\t%d",SampStrings[mostIX],(double)1-(double)secondMost/most,most);
 			}
 		}
 		fprintf(fpo,"\n");

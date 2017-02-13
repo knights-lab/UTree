@@ -1,4 +1,4 @@
-/* UTree v1.1b -- ultrafast unique k-mer mapper by Gabe. 
+/* UTree v1.2 -- ultrafast unique k-mer mapper by Gabe. 
 Copyright 2015-2017 Knights Lab, Regents of the University of Minnesota.
 This software is released under the GNU Affero General Public License (AGPL) v3.0.
 */
@@ -956,13 +956,16 @@ UTree *XT_read32(char *db, char delim) {
 	puts("Tree read properly.");
 	return utree;
 }
-
-size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse) {
+size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse, int doRC) {
 	FILE *fp = fopen(filename, "rb"), *fpo = fopen(outfile, "wb");
 	if (fp == NULL) { puts("Invalid input files"); exit(1); }
-	size_t ns=0, LINELEN = 268435456; // 100MB lines
-	char *line = malloc(LINELEN + 1);  // ktree
+	size_t ns=0, LINELEN = 268435456; // 256MB lines
+	char *line = malloc(LINELEN*2 + 2);  // ktree
 	size_t goodFinds = 0;
+	char RC[256];
+	memset(RC,'N',256);
+	RC['A'] = RC['a'] = 'T'; RC['C'] = RC['c'] = 'G';
+	RC['G'] = RC['g'] = 'C'; RC['T'] = RC['t'] = 'A';
 	
 	// Cache important variables
 	char *Dump = utree->Dump;
@@ -1000,6 +1003,14 @@ size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse
 		register size_t length = strlen(src); \
 		if (src[length-1] == '\n') --length; /* lop off newline(s) */ \
 		if (src[length-1] == '\r') --length; /* supports every platform! */ \
+		if (doRC) { \
+			src[length] = 'N'; \
+			src[2*length+1] = 0; \
+			for (uint32_t x = length+1; x <= 2*length; ++x) \
+				src[x] = RC[src[length+length-x]]; \
+			length = 2*length + 1; \
+			/* printf("Sequence with recvomp is: %s\n",src); */ \
+		} \
 		WTYPE word = 0; \
 		size_t foundUniq = 0; \
 		size_t maxSemis = 0; \
@@ -1426,7 +1437,11 @@ int UT_writeTreeBinary(UTree *utree, char* filename) {
 	fclose(of);
 	return 1;
 }
-
+#if defined BUILD_GG || defined SEARCH_GG
+	#define DO_GG 1
+#else
+	#define DO_GG 0
+#endif
 // usage: RadixalTriecrobium [see module usage]
 int main(int argc, char *argv[]) { 
 	#ifdef COMPRESS
@@ -1434,67 +1449,46 @@ int main(int argc, char *argv[]) {
 	XT_cmp32(argv[1],argv[2]); //("outNEW.cbt","compTre.ctr");
 	exit(0);
 	#endif
-	#ifdef SEARCH
-	if (argc != 4) {puts("usage: xtree-search compTree.ctr fastaToSearch.fa output.txt"); exit(1); }
-	UTree *xtr = XT_read32(argv[1],0); //("compTre.ctr");
-	XT_doSearch32(xtr,argv[2],argv[3],0);
+	#if defined SEARCH || defined SEARCH_GG
+	if (argc < 4) {
+		printf("usage: xtree-search%s compTree.ctr fastaToSearch.fa output.txt [RC]",
+			DO_GG ? "GG" : ""); exit(1); }
+	UTree *xtr = XT_read32(argv[1], DO_GG ? ';' : 0); //("compTre.ctr");
+	XT_doSearch32(xtr,argv[2],argv[3], DO_GG ? 7 : 0, argc > 4);
 	exit(0);
 	#endif
-	#ifdef SEARCH_GG
-	if (argc != 4) {puts("usage: xtree-searchGG compTreeGG.ctr fastaToSearch.fa output.txt"); exit(1); }
-	UTree *xtr = XT_read32(argv[1],';'); //("compTre.ctr");
-	XT_doSearch32(xtr,argv[2],argv[3],7);
-	exit(0);
-	#endif
-	#ifdef BUILD
-	if (argc < 4) {puts("usage: utree-build input_fasta.fa labels.map output.ubt [threads]"); exit(1); }
+	#if defined BUILD || defined BUILD_GG
+	if (argc < 5) {
+		printf("usage: utree-build%s input_fasta.fa labels.map output.ubt threads(0=auto) [overlap]",
+			DO_GG ? "GG" : ""); exit(1); }
 	char *filename = argv[1], *dbname = argv[2], *outname = argv[3];
 	int threads = 1;
 	#ifdef _OPENMP
-		threads = omp_get_max_threads();
-		if (argc > 4) threads = atoi(argv[4]);
+		threads = atoi(argv[4]) ?: omp_get_max_threads();
 		omp_set_num_threads(threads);
-		printf("Running with %d threads...\n",threads);
+		printf("Using up to %d threads.\n",threads);
 	#else
-		puts("Multithreading is disabled in this build.");
+		puts("Multi-threading is disabled in this build.");
 	#endif
 	
 	UTree *myU = UT_createTree(threads);
 	puts("Tree initialized.");
-	UT_parseSampFastaExternOSFA(myU,filename,dbname,0,1,PACKSIZE/2,0); // 0,2 for ixcol, ixlab in img
+	uint32_t ov = DO_GG ? 1 : PACKSIZE/2;
+	if (argc > 5) 
+		ov = atoi(argv[5]),
+		printf("Setting overlap to %u\n",ov);
+	UT_parseSampFastaExternOSFA(myU,filename,dbname,0,1,ov,DO_GG); // 0,2 for ixcol, ixlab in img
 	puts("File parsed.");
 	UT_writeTreeBinary(myU, outname);
 	puts("Tree written.");
 	
 	char *logFN = calloc(4097,1);
-	sprintf(logFN,"%s.log",outname);
+	sprintf(logFN,"%s%s.log",outname, DO_GG ? ".gg" : "");
 	UT_writeSamples(myU, logFN);
-	return 0;
-	#endif
-	
-	#ifdef BUILD_GG
-	if (argc < 4) {puts("usage: utree-buildGG input_fasta.fa labels.map output.ubt [threads]"); exit(1); }
-	char *filename = argv[1], *dbname = argv[2], *outname = argv[3];
-	int threads = 1;
-	#ifdef _OPENMP
-		threads = omp_get_max_threads();
-		if (argc > 4) threads = atoi(argv[4]);
-		omp_set_num_threads(threads);
-		printf("Running with %d threads...\n",threads);
-	#else
-		puts("Multithreading is disabled in this build.");
-	#endif
-	UTree *myU = UT_createTree(threads);
-	
-	UT_parseSampFastaExternOSFA(myU,filename,dbname,0,1,2,1);
-	UT_writeTreeBinary(myU, outname);
-	char *logFN = calloc(4097,1);
-	sprintf(logFN,"%s.gg.log",outname);
-	UT_writeSamples(myU, logFN);
-	return 0;
+	exit(0);
 	#endif
 	
 	puts("Nothing to see here.");
 	puts("Compile with one of: -D BUILD, BUILD_GG, SEARCH, SEARCH_GG, COMPRESS");
-	exit(1);
+	return 1;
 }

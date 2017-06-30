@@ -296,19 +296,21 @@ inline long xeTreeU_GG(KMerY *tree, WTYPE word, IXTYPE ix, UTree *ut) {
 		//printf("old = %s\nnew = %s\n",oldOrig,ut->SampStrings[ix]);
 		//printf("--> Conserved num semis = %u, position = %u\n",numP, ixP);
 		if (numP == 0) // kingdom diverged
-			++numP, strcpy(buffer,"k__; "), ixP = 2; 
+			++numP, strcpy(buffer,"k__;"), ixP = 2; 
 		if (numP == 1)
-			++numP, strcpy(buffer + ixP + 2,"p__; "), ixP += 5;
+			++numP, strcpy(buffer + ixP + 1,"p__;"), ixP += 4;
 		if (numP == 2)
-			++numP, strcpy(buffer + ixP + 2,"c__; "), ixP += 5;
+			++numP, strcpy(buffer + ixP + 1,"c__;"), ixP += 4;
 		if (numP == 3)
-			++numP, strcpy(buffer + ixP + 2,"o__; "), ixP += 5;
+			++numP, strcpy(buffer + ixP + 1,"o__;"), ixP += 4;
 		if (numP == 4)
-			++numP, strcpy(buffer + ixP + 2,"f__; "), ixP += 5;
+			++numP, strcpy(buffer + ixP + 1,"f__;"), ixP += 4;
 		if (numP == 5)
-			++numP, strcpy(buffer + ixP + 2,"g__; "), ixP += 5;
-		if (numP == 6) // species diverged
-			strcpy(buffer + ixP + 2,"s__");
+			++numP, strcpy(buffer + ixP + 1,"g__;"), ixP += 4;
+		if (numP == 6)
+			++numP, strcpy(buffer + ixP + 1,"s__;"), ixP += 4;
+		if (numP == 7) // strain diverged
+			strcpy(buffer + ixP + 1,"t__");
 		//printf("--> Interpolated: %s\n",buffer);
 		IXTYPE new_ix = addSampleUd(ut,buffer);
 		
@@ -391,19 +393,21 @@ inline int parapluieU(UTree *ktree, WTYPE wordO, IXTYPE ix) {
 	strcpy(buffer,oldOrig); \
 	if (numP < 2) { tree->ix = BAD_IX; return 1; } \
 	if (numP == 0) \
-		++numP, strcpy(buffer,"k__; "), ixP = 2; \
+		++numP, strcpy(buffer,"k__;"), ixP = 2; \
 	if (numP == 1) \
-		++numP, strcpy(buffer + ixP + 2,"p__; "), ixP += 5; \
+		++numP, strcpy(buffer + ixP + 1,"p__;"), ixP += 4; \
 	if (numP == 2) \
-		++numP, strcpy(buffer + ixP + 2,"c__; "), ixP += 5; \
+		++numP, strcpy(buffer + ixP + 1,"c__;"), ixP += 4; \
 	if (numP == 3) \
-		++numP, strcpy(buffer + ixP + 2,"o__; "), ixP += 5; \
+		++numP, strcpy(buffer + ixP + 1,"o__;"), ixP += 4; \
 	if (numP == 4) \
-		++numP, strcpy(buffer + ixP + 2,"f__; "), ixP += 5; \
+		++numP, strcpy(buffer + ixP + 1,"f__;"), ixP += 4; \
 	if (numP == 5) \
-		++numP, strcpy(buffer + ixP + 2,"g__; "), ixP += 5; \
+		++numP, strcpy(buffer + ixP + 1,"g__;"), ixP += 4; \
 	if (numP == 6) \
-		strcpy(buffer + ixP + 2,"s__"); \
+		++numP, strcpy(buffer + ixP + 1,"s__;"), ixP += 4; \
+	if (numP == 7) \
+		strcpy(buffer + ixP + 1,"t__"); \
 	IXTYPE new_ix = addSampleUd(ut,buffer); \
 	tree->ix = new_ix; \
 	return 0; \
@@ -1454,7 +1458,7 @@ int main(int argc, char *argv[]) {
 		printf("usage: xtree-search%s compTree.ctr fastaToSearch.fa output.txt [RC]",
 			DO_GG ? "GG" : ""); exit(1); }
 	UTree *xtr = XT_read32(argv[1], DO_GG ? ';' : 0); //("compTre.ctr");
-	XT_doSearch32(xtr,argv[2],argv[3], DO_GG ? 7 : 0, argc > 4);
+	XT_doSearch32(xtr,argv[2],argv[3], DO_GG ? 8 : 0, argc > 4);
 	exit(0);
 	#endif
 	#if defined BUILD || defined BUILD_GG

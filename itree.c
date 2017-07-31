@@ -1110,7 +1110,7 @@ size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse
 		XT_FINALIZE_WS()
 	}
 	else {
-XT_INITIATE_WS()
+		XT_INITIATE_WS()
 		#define XT_PREP_VOTE() XT_FULLVOTE()
 		XT_WORD_SEARCH()
 		#undef XT_PREP_VOTE

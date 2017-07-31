@@ -1039,6 +1039,7 @@ size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse
 	#define XT_FULLVOTE() \
 		/* full vote: store full level information */ \
 		int horse = semicolons[ix]; \
+		if (!horse) continue; \
 		Chariot[horse][KingsMen[horse]++] = ix;
 	#define XT_EARLYTERMINATE() \
 		/* For early termination, no voting */ \
@@ -1109,7 +1110,7 @@ size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse
 		XT_FINALIZE_WS()
 	}
 	else {
-		XT_INITIATE_WS()
+XT_INITIATE_WS()
 		#define XT_PREP_VOTE() XT_FULLVOTE()
 		XT_WORD_SEARCH()
 		#undef XT_PREP_VOTE
@@ -1451,15 +1452,15 @@ int main(int argc, char *argv[]) {
 	#endif
 	#if defined SEARCH || defined SEARCH_GG
 	if (argc < 4) {
-		printf("usage: xtree-search%s compTree.ctr fastaToSearch.fa output.txt [RC]",
+		printf("usage: xtree-search%s compTree.ctr fastaToSearch.fa output.txt [RC]\n",
 			DO_GG ? "GG" : ""); exit(1); }
 	UTree *xtr = XT_read32(argv[1], DO_GG ? ';' : 0); //("compTre.ctr");
-	XT_doSearch32(xtr,argv[2],argv[3], DO_GG ? 7 : 0, argc > 4);
+	XT_doSearch32(xtr,argv[2],argv[3], DO_GG ? 8 : 0, argc > 4);
 	exit(0);
 	#endif
 	#if defined BUILD || defined BUILD_GG
 	if (argc < 5) {
-		printf("usage: utree-build%s input_fasta.fa labels.map output.ubt threads(0=auto) [overlap]",
+		printf("usage: utree-build%s input_fasta.fa labels.map output.ubt threads(0=auto) [overlap]\n",
 			DO_GG ? "GG" : ""); exit(1); }
 	char *filename = argv[1], *dbname = argv[2], *outname = argv[3];
 	int threads = 1;

@@ -956,12 +956,18 @@ UTree *XT_read32(char *db, char delim) {
 	puts("Tree read properly.");
 	return utree;
 }
-size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse, int doRC) {
+
+typedef struct {char *s; uint32_t n;} String_Count_t;
+inline int byStr(const void *A, const void *B) {
+	return strcmp(((String_Count_t *)A)->s, ((String_Count_t *)B)->s);}
+static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse, int doRC) {
 	FILE *fp = fopen(filename, "rb"), *fpo = fopen(outfile, "wb");
 	if (fp == NULL) { puts("Invalid input files"); exit(1); }
-	size_t ns=0, LINELEN = 268435456; // 256MB lines
+	static const size_t LINELEN = 268435456; // 256MB lines
 	char *line = malloc(LINELEN*2 + 2);  // ktree
-	size_t goodFinds = 0;
+	if (!line) {fputs("OOM:lineIn\n",stderr); exit(3);}
+	line[LINELEN-1] = 0, line[LINELEN*2+1] = 0;
+	size_t ns = 0, goodFinds = 0;
 	char RC[256];
 	memset(RC,'N',256);
 	RC['A'] = RC['a'] = 'T'; RC['C'] = RC['c'] = 'G';
@@ -974,24 +980,22 @@ size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse
 	char **SampStrings = utree->SampStrings;
 	uint8_t *semicolons = utree->semicolons;
 	
-	static const int minLvl = 1, MAXLEN = 4096;
-	int allTheKingsHorses = doCollapse + 1; // 7 levels + 1 for GG
-	//IXTYPE Chariot[allTheKingsHorses][UINT16_MAX];
-	IXTYPE **Chariot = malloc(sizeof(*Chariot)*allTheKingsHorses);
-	if (doCollapse) for (int j = minLvl; j < allTheKingsHorses; ++j) 
-		Chariot[j] = malloc(sizeof(*Chariot[j])*UINT16_MAX);
-	unsigned *KingsMen = calloc(allTheKingsHorses,sizeof(*KingsMen));// = {0};
-	//char humpty[4096] - {0};
-	//uint8_t Hashes[196613] = {0};
-	unsigned *Hashes = calloc(maxIX,sizeof(*Hashes));
-	IXTYPE UniqTaxa[maxIX], UniqCounts[maxIX];
-	IXTYPE candidate = -1;
+	// Full aufbau
+	uint32_t *Hashes = 0; 
+	String_Count_t *Tax_Cnt = 0;
+	if (doCollapse) Hashes = calloc(maxIX,sizeof(*Hashes)),
+		Tax_Cnt = malloc(maxIX*sizeof(*Tax_Cnt));
+		
+	// For heuristic/shallow too
+	IXTYPE *AllTheKingsHorses = malloc(LINELEN*sizeof(IXTYPE));
+	int kingsMen = 0, humpty, togetherAgain;
 	
-	// For no-/heuristic voting 
-	IXTYPE AllTheKingsHorses[doCollapse? 1 : UINT16_MAX];
-	int kingsMen = 0;
+	if ((doCollapse && !(Tax_Cnt && Hashes)) || !AllTheKingsHorses) {
+		fputs("ERROR: Init out of memory.\n",stderr); exit(3);}
+	
 	#define XT_INITIATE_WS() \
 	while (++ns, line = fgets(line,LINELEN,fp)) { \
+		if (!(ns & 1048575)) printf("Searched %llu queries\n",ns); \
 		char *src = line; \
 		while (*++src && *src != ' ' && *src != '\n'); \
 		line[src-line] = 0; \
@@ -1036,11 +1040,7 @@ size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse
 		} \
 	}
 	// These are prototypes of the requisite XT_PREP_VOTE
-	#define XT_FULLVOTE() \
-		/* full vote: store full level information */ \
-		int horse = semicolons[ix]; \
-		if (!horse) continue; \
-		Chariot[horse][KingsMen[horse]++] = ix;
+	#define XT_FULLVOTE() AllTheKingsHorses[++kingsMen] = ix;
 	#define XT_EARLYTERMINATE() \
 		/* For early termination, no voting */ \
 		++goodFinds; \
@@ -1115,19 +1115,72 @@ size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse
 		XT_WORD_SEARCH()
 		#undef XT_PREP_VOTE
 		if (foundUniq) {
-			//printf("K-mers found = %u\n",foundUniq);
 			++goodFinds;
-			// assign each unique pointer to a string
-			int uix = 0; //, numUniq = 0;
-			for (int txLvl=minLvl; txLvl < allTheKingsHorses; ++txLvl) {
-				//printf("Taxonomy level: %d",txLvl);
-				if (!KingsMen[txLvl]) { //puts(" (empty)"); 
-					//LevelIX[txLvl+1] = uix; 
-					continue; }
-				//puts("");
-				IXTYPE *Taxa = Chariot[txLvl];
-				for (int i = 0; i < KingsMen[txLvl]; ++i) {
-					++Hashes[Taxa[i]];
+			if (foundUniq == 1) {
+				fprintf(fpo,"%s\n",SampStrings[*AllTheKingsHorses]); continue; }
+			for (uint32_t i = 0; i < kingsMen; ++i) 
+				++Hashes[AllTheKingsHorses[i]];
+			uint32_t uix = 0;
+			for (uint32_t i = kingsMen, t; i; --i) if (Hashes[t=AllTheKingsHorses[i-1]]) 
+				Tax_Cnt[uix++] = (String_Count_t){SampStrings[t],Hashes[t]},
+				Hashes[t] = 0;
+			if (uix == 1) {
+				fprintf(fpo,"%s\n",SampStrings[*AllTheKingsHorses]); continue; }
+			qsort(Tax_Cnt, uix, sizeof(*Tax_Cnt), byStr);
+			
+			uint32_t cutoff = kingsMen - kingsMen/TAXACUT, lv = 0, 
+				m_lv = 0, m_st = 0, m_ed = kingsMen, m_div = 0;
+			for (;;) {
+				uint32_t run = Tax_Cnt[m_st].n;
+				for (uint32_t st = m_st + 1; st < m_ed; ++st) {
+					uint32_t td;
+					char *first = Tax_Cnt[st-1].s, *cur = Tax_Cnt[st].s;
+					for (td = m_div; first[td] && first[td] == cur[td]; ++td) {
+						if (first[td]==';') {run += Tax_Cnt[td].n; break;}
+					}
+					// also add if first[td] was null (because it's still same up till next)
+					
+				}
+				// compare: is current run greater than this level's best? 
+				// if so, set this level's run to this and update the m_... vars accordingly
+				
+				// reset best run so far so next level is fresh
+				// update cutoff 
+			}
+			
+			// LAST LINE REACHED
+			
+			
+			/// copied fro embalmer
+			
+			// Ascend tree based on divergences
+					uint32_t cutoff = tix - tix/TAXACUT; // need 90% support?
+					//printf("    Query: %s, cutoff = %u, tix = %u\n", QHead[NewIX[Offset[i]]], cutoff, tix);
+					uint32_t st = 0, ed = tix;
+					for (lv = 1; lv <= maxDiv; ++lv) {
+						uint32_t accum = 1;
+						for (uint32_t z = st+1; z < ed; ++z) {
+							if (Divergence[z] >= lv) ++accum;
+							else if (accum >= cutoff) {ed = z; break;}
+							else accum = 1, st = z; //, printf("reset z=%u, lv %u: %u < %u\n",z,lv,accum,cutoff);
+						}
+						if (accum < cutoff) break;
+						cutoff = accum - accum/TAXACUT;
+					}
+					//for (int b = 0; b < tix; ++b) printf("%d: [%u] %s\n", b, Divergence[b], Taxa[b]); 
+					
+					// copy result up until lv-1 semicolon into Taxon, set FinalTaxon = Taxon;
+					uint32_t s = 0;
+					if (ed) --ed; --lv;
+					for (st = 0; Taxa[ed][st] && (s += Taxa[ed][st] == ';') < lv; ++st) 
+						Taxon[st] = Taxa[ed][st];
+					Taxon[st] = 0;
+					FinalTaxon = Taxon;
+					
+					///////////////////////////
+			uint32_t uix = 0;
+			for (int i = 0; i < KingsMen[txLvl]; ++i) {
+				++Hashes[Taxa[i]];
 					//printf("  %u: taxid = %d (%s), hash_count = %d\n",i,
 					//	Taxa[i],SampStrings[Taxa[i]],Hashes[Taxa[i]]);
 				}
@@ -1155,6 +1208,7 @@ size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse
 			
 			WordCountPair WordsAndCounts[uix];
 			WordCountPair *ReserveBins[uix];
+			if (!WordsAndCounts || !ReserveBins) {fputs("OOM:ReserveBins\n",stderr); exit(3);}
 			for (int i = 1; i < allTheKingsHorses; ++i) {
 				WordCountPair *WCptr = WordsAndCounts; 
 				*WordsAndCounts = (WordCountPair){0,0,0,0};

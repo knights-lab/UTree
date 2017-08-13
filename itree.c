@@ -1,4 +1,4 @@
-/* UTree v1.2 -- ultrafast unique k-mer mapper by Gabe. 
+/* UTree -- ultrafast unique k-mer mapper by Gabe. 
 Copyright 2015-2017 Knights Lab, Regents of the University of Minnesota.
 This software is released under the GNU Affero General Public License (AGPL) v3.0.
 */
@@ -715,12 +715,12 @@ int ixCol, int lblCol, int inc, int doGG) {
 	}
 	//free(Pointers), free(ixList), free(lblList);
 	--lines; // lowerbound on search function is max index, not total no
-	size_t ns=0, LINELEN = 268435456; // 100MB lines
+	size_t ns=0, LINELEN = 268435456; // 256MB lines
 	char *line = malloc(LINELEN + 1), *origLine = line;
 	if (!line) {puts("FASTA parse: memory error."); exit(2);}
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
 		char *src = line + 1; // sample name parsed to generate ix
-		while (*src != ' ' && *src != '\n') ++src; 
+		while (/* *src != ' ' && */ *src != '\n') ++src; 
 		memset(src,'\0',1); 
 		size_t pre_ix = crBST(line+1,lines, ixSorted); 
 		//printf("Line %llu, preIX=%llu \n",ns,pre_ix);
@@ -772,7 +772,7 @@ int ixCol, int lblCol, int inc, int doGG) {
 	
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
 		char *src = line + 1; // sample name parsed to generate ix
-		while (*src != ' ' && *src != '\n') ++src; 
+		while (/* *src != ' ' && */ *src != '\n') ++src; 
 		memset(src,'\0',1); 
 		//IXTYPE ix = addSampleUd(utree,line+1); 
 		size_t pre_ix = crBST(line+1,lines, ixSorted); 
@@ -1505,7 +1505,7 @@ int UT_writeTreeBinary(UTree *utree, char* filename) {
 	#define DO_GG 0
 #endif
 // usage: RadixalTriecrobium [see module usage]
-#define VER "[v1.5]"
+#define VER "[v1.5a]"
 int main(int argc, char *argv[]) { 
 	#ifdef COMPRESS
 	if (argc != 3) {puts("usage: xtree-compress preTree.ubt compTree.ctr"); exit(1); }

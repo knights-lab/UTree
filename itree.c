@@ -1538,7 +1538,7 @@ int main(int argc, char *argv[]) {
 	#endif
 	#if defined BUILD || defined BUILD_GG
 	if (argc < 5) {
-		printf(VER " usage: utree-build%s input_fasta.fa labels.map output.ubt threads(0=auto) [overlap]\n",
+		printf(VER " usage: utree-build%s input_fasta.fa labels.map output.ubt threads{0=auto} [stepsize]\n",
 			DO_GG ? "GG" : ""); exit(1); }
 	printf("This is UTree " VER "\n");
 	char *filename = argv[1], *dbname = argv[2], *outname = argv[3];
@@ -1556,7 +1556,7 @@ int main(int argc, char *argv[]) {
 	uint32_t ov = DO_GG ? 1 : PACKSIZE/2;
 	if (argc > 5) 
 		ov = atoi(argv[5]),
-		printf("Setting overlap to %u\n",ov);
+		printf("Setting step size to %u\n",ov);
 	UT_parseSampFastaExternOSFA(myU,filename,dbname,0,1,ov,DO_GG); // 0,2 for ixcol, ixlab in img
 	puts("File parsed.");
 	UT_writeTreeBinary(myU, outname);

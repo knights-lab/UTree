@@ -1508,7 +1508,7 @@ int UT_writeTreeBinary(UTree *utree, char* filename) {
 #define VER "[v1.5a]"
 int main(int argc, char *argv[]) { 
 	#ifdef COMPRESS
-	if (argc != 3) {puts("usage: xtree-compress preTree.ubt compTree.ctr"); exit(1); }
+	if (argc != 3) {puts(VER " usage: xtree-compress preTree.ubt compTree.ctr"); exit(1); }
 	XT_cmp32(argv[1],argv[2]); //("outNEW.cbt","compTre.ctr");
 	exit(0);
 	#endif

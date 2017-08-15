@@ -638,7 +638,7 @@ int xcmpP(const void *str1, const void *str2) {
 
 
 size_t UT_parseSampFastaExternOSFA(UTree *utree, char* filename, char* labels, 
-int ixCol, int lblCol, int inc, int doGG) {
+int ixCol, int lblCol, uint32_t lv, int doGG) {
 	FILE *fp = fopen(filename, "rb"), *fp2 = fopen(labels, "rb");
 	if (fp == 0 || fp2 == 0) { puts("Invalid input file(s)"); exit(1); }
 	// read in the second file
@@ -722,6 +722,7 @@ int ixCol, int lblCol, int inc, int doGG) {
 	size_t ns=0, LINELEN = 268435456; // 256MB lines
 	char *line = malloc(LINELEN + 1), *origLine = line;
 	if (!line) {puts("FASTA parse: memory error."); exit(2);}
+	const uint32_t k1 = PACKSIZE - 1; uint32_t kv = k1 + lv;
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
 		char *src = line + 1; // sample name parsed to generate ix
 		while (/* *src != ' ' && */ *src != '\n') ++src; 
@@ -735,20 +736,34 @@ int ixCol, int lblCol, int inc, int doGG) {
 		if (!(line = fgets(line,LINELEN,fp))) // encode sequence
 			{ printf("Error parsing FASTA (1pass): %llu",ns); exit(2); }
 		src = line;
-		register size_t length = strlen(src);
+		register uint32_t length = strlen(src);
 		if (src[length-1] == '\n') --length; // lop off newline(s)
 		if (src[length-1] == '\r') --length; // supports every platform!
-		WTYPE word = 0;
-		//puts("  -->looped"); continue;
+		WTYPE w = 0;
 		// add clumps and indices to tree
-		size_t z = 0, x = 0; for (size_t k = 0; k < length; ++k) {
-			WTYPE motive = *(C2Xb+*src++);
-			//printf("%c",*(src-1));
-			if (motive == 255) { word = 0, x=0,z=0; continue; }
-			word <<=2u, word += motive;
-			if (++x >= PACKSIZE && ++z == inc) z=0, addWord(utree, word, ix);
+		for (uint32_t i = kv; i < length; ++i) {
+			//WTYPE m = *(C2Xb+src[i]);
+			if (lv >= 1) {
+				if (C2Xb[src[i-kv]] != 0) continue;
+				if (lv >= 2) {
+					if (C2Xb[src[i-kv+1]] != 2) continue;
+					if (lv >= 3) {
+						if (C2Xb[src[i-kv+2]] != 1) continue;
+						if (lv >= 4) {
+							if (C2Xb[src[i-kv+3]] != 3) continue;
+						}
+					}
+				}
+			}
+			w = 0;
+			for (uint32_t j = i - k1, p = j; j <= i; ++j) {
+				if (C2Xb[src[j]] == 255) {i += j - p + lv; goto ENDER;}
+				w <<= 2u, w |= C2Xb[src[j]];
+			}
+			addWord(utree, w, ix);
+			ENDER:NULL;
 		}
-		if (z) addWord(utree,word,ix);
+		//if (z) addWord(utree,word,ix);
 	}
 	size_t totNodes = 0;
 	#pragma omp parallel for reduction(+:totNodes)
@@ -756,7 +771,7 @@ int ixCol, int lblCol, int inc, int doGG) {
 		totNodes += utree->NumsInserted[i];
 	printf("Done with sequence parse: %llu k-mers made\n",totNodes);
 	if (!totNodes) {puts("Error: no k-mers. Bad input/params!"); exit(2); }
-	if (inc == 1) 
+/* 	if (inc == 1) 
 		goto End;
 	// Round 2: double-check and nullify
 	rewind(fp);
@@ -776,7 +791,7 @@ int ixCol, int lblCol, int inc, int doGG) {
 	
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
 		char *src = line + 1; // sample name parsed to generate ix
-		while (/* *src != ' ' && */ *src != '\n') ++src; 
+		while (*src != '\n') ++src; 
 		memset(src,'\0',1); 
 		//IXTYPE ix = addSampleUd(utree,line+1); 
 		size_t pre_ix = crBST(line+1,lines, ixSorted); 
@@ -799,7 +814,7 @@ int ixCol, int lblCol, int inc, int doGG) {
 		}
 	}
 	if (doGG) checkUmbrellaU_GG(utree); else checkUmbrellaU(utree); // clear backlog
-	
+	 */
 End:
 	fclose(fp); free(origLine); // purge buffers
 	free(dump);
@@ -1509,7 +1524,7 @@ int UT_writeTreeBinary(UTree *utree, char* filename) {
 	#define DO_GG 0
 #endif
 // usage: RadixalTriecrobium [see module usage]
-#define VER "[v1.5a]"
+#define VER "[v2.0 SigNature Edition]"
 int main(int argc, char *argv[]) { 
 	#ifdef COMPRESS
 	if (argc != 3) {puts(VER " usage: xtree-compress preTree.ubt compTree.ctr"); exit(1); }
@@ -1538,7 +1553,7 @@ int main(int argc, char *argv[]) {
 	#endif
 	#if defined BUILD || defined BUILD_GG
 	if (argc < 5) {
-		printf(VER " usage: utree-build%s input_fasta.fa labels.map output.ubt threads{0=auto} [stepsize]\n",
+		printf(VER " usage: utree-build%s input_fasta.fa labels.map output.ubt threads{0=auto} [complevel]\n",
 			DO_GG ? "GG" : ""); exit(1); }
 	printf("This is UTree " VER "\n");
 	char *filename = argv[1], *dbname = argv[2], *outname = argv[3];
@@ -1553,11 +1568,10 @@ int main(int argc, char *argv[]) {
 	
 	UTree *myU = UT_createTree(threads);
 	puts("Tree initialized.");
-	uint32_t ov = DO_GG ? 1 : PACKSIZE/2;
-	if (argc > 5) 
-		ov = atoi(argv[5]),
-		printf("Setting step size to %u\n",ov);
-	UT_parseSampFastaExternOSFA(myU,filename,dbname,0,1,ov,DO_GG); // 0,2 for ixcol, ixlab in img
+	uint32_t cl = 1;
+	if (argc > 5) cl = atoi(argv[5]);
+	printf("Setting compression level to %u\n",cl);
+	UT_parseSampFastaExternOSFA(myU,filename,dbname,0,1,cl,DO_GG); // 0,2 for ixcol, ixlab in img
 	puts("File parsed.");
 	UT_writeTreeBinary(myU, outname);
 	puts("Tree written.");

@@ -725,8 +725,8 @@ int ixCol, int lblCol, uint32_t lv, int doGG) {
 	const uint32_t k1 = PACKSIZE - 1; uint32_t kv = k1 + lv;
 	while (++ns, line = fgets(line,LINELEN,fp)) { 
 		char *src = line + 1; // sample name parsed to generate ix
-		while (/* *src != ' ' && */ *src != '\n') ++src; 
-		memset(src,'\0',1); 
+		src = strchr(src,'\n'); 
+		if (src) memset(src,'\0',1); 
 		size_t pre_ix = crBST(line+1,lines, ixSorted); 
 		//printf("Line %llu, preIX=%llu \n",ns,pre_ix);
 		//fprintf(outfile,"Tag is %s, which maps to %llu\n",line+1,pre_ix);
@@ -763,7 +763,6 @@ int ixCol, int lblCol, uint32_t lv, int doGG) {
 			addWord(utree, w, ix);
 			ENDER:NULL;
 		}
-		//if (z) addWord(utree,word,ix);
 	}
 	size_t totNodes = 0;
 	#pragma omp parallel for reduction(+:totNodes)
@@ -771,51 +770,6 @@ int ixCol, int lblCol, uint32_t lv, int doGG) {
 		totNodes += utree->NumsInserted[i];
 	printf("Done with sequence parse: %llu k-mers made\n",totNodes);
 	if (!totNodes) {puts("Error: no k-mers. Bad input/params!"); exit(2); }
-/* 	if (inc == 1) 
-		goto End;
-	// Round 2: double-check and nullify
-	rewind(fp);
-	line = origLine;
-	ns = 0;
-	puts("Refining tree...");
-	// Balance the tree to facilitate search
-	#pragma omp parallel for
-	for (size_t i = 0; i < KHASH_SIZE; ++i) {
-		if (utree->NumsInserted[i] > 2) utree->Roots[i] = 
-			simpleBalanceU(utree->Roots[i],utree->NumsInserted[i]);
-		size_t tempThres = utree->NumsInserted[i] * 2;
-		//if (tempThres > utree->BalanceThreshes[i])
-		if (tempThres < 3) tempThres = UBAL_THRES;
-			utree->BalanceThreshes[i] = tempThres;
-	}
-	
-	while (++ns, line = fgets(line,LINELEN,fp)) { 
-		char *src = line + 1; // sample name parsed to generate ix
-		while (*src != '\n') ++src; 
-		memset(src,'\0',1); 
-		//IXTYPE ix = addSampleUd(utree,line+1); 
-		size_t pre_ix = crBST(line+1,lines, ixSorted); 
-		IXTYPE ix = addSampleUd(utree,lblSorted[pre_ix]);
-		
-		if (!(line = fgets(line,LINELEN,fp))) // encode sequence
-			{ printf("Error parsing FASTA (2pass): %llu",ns); exit(2); }
-		src = line;
-		register size_t length = strlen(src);
-		if (src[length-1] == '\n') --length; // lop off newline(s)
-		if (src[length-1] == '\r') --length; // supports every platform!
-		WTYPE word = 0;
-		
-		// add clumps and indices to tree
-		size_t z = 0; for (size_t k = 0; k < length; ++k) {
-			WTYPE motive = *(C2Xb+*src++);
-			if (motive == 255) { word = 0, z=0; continue; }
-			word <<=2u, word += motive;
-			if (++z >= PACKSIZE) screenWord(utree, (WordIxPair){word,ix});
-		}
-	}
-	if (doGG) checkUmbrellaU_GG(utree); else checkUmbrellaU(utree); // clear backlog
-	 */
-End:
 	fclose(fp); free(origLine); // purge buffers
 	free(dump);
 	return ns-1; // number of sequences parsed
@@ -1017,7 +971,7 @@ UTree *XT_read32(char *db, char delim) {
 typedef struct {char *s; uint32_t n;} String_Count_t;
 static int byStr(const void *A, const void *B) {
 	return strcmp(((String_Count_t *)A)->s, ((String_Count_t *)B)->s);}
-static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse, int doRC) {
+static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse, uint32_t lv, int doRC) {
 	FILE *fp = fopen(filename, "rb"), *fpo = fopen(outfile, "wb");
 	if (fp == NULL) { puts("Invalid input files"); exit(1); }
 	static const size_t LINELEN = 16777216; // 16MB lines
@@ -1042,6 +996,7 @@ static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, 
 	IXTYPE maxIX = utree->sampIX + 1;
 	char **SampStrings = utree->SampStrings;
 	uint8_t *semicolons = utree->semicolons;
+	const uint32_t k1 = PACKSIZE - 1; uint32_t kv = k1 + lv;
 	
 	#define XT_INITIATE_WS() \
 	char *line = malloc(LINELEN*2 + 2), *line2 = malloc(LINELEN*2 + 2), stop=0; \
@@ -1070,7 +1025,7 @@ static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, 
 		/* if (ns > 729500) printf("SEQUENCE %u: %s\n",ns,line+1); */ \
 		src = line2; \
 		if (*src == '>') {fprintf(stderr,"ERROR: sequence begins '>' [L %u, '%s']\n",ns,src); exit(2);} \
-		register size_t length = strlen(src); \
+		register uint32_t length = strlen(src); \
 		if (!length) {fprintf(stderr,"ERROR: empty query line %u\n",ns); exit(2);} \
 		if (src[length-1] == '\n') --length; /* lop off newline(s) */ \
 		if (src[length-1] == '\r') --length; /* supports every platform! */ \
@@ -1082,28 +1037,37 @@ static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, 
 			length = 2*length + 1; \
 			/* printf("Sequence with recvomp is: %s\n",src); */ \
 		} \
-		WTYPE word = 0; \
+		WTYPE w = 0; \
 		size_t foundUniq = 0; \
-		size_t maxSemis = 0; \
-		char *maxTax = 0; \
-		size_t nextValid = PACKSIZE;
+		size_t maxSemis = 0; //, nextValid = PACKSIZE;
 	#define XT_FINALIZE_WS() }
 	#define XT_WORD_SEARCH() \
 	/* search for words in tree */ \
 	/* printf("Conidering: \n"); */ \
-	size_t z = 0; for (size_t k = 0; k < length; ++k) { \
-		/* printf("%c,",*src++); continue; */ \
-		WTYPE motive = *(C2Xb+*src++); \
-		if (motive == 255) { word = 0, z=0, nextValid = PACKSIZE; continue; } \
-		word <<=2u, word += motive; \
-		if (++z >= PACKSIZE) { \
-			IXTYPE ix = XT_getIX32(utree, word); \
-			/* printf("%u ",(unsigned)ix); continue; */ \
-			if (ix < maxIX) { \
-				++foundUniq; \
-				XT_PREP_VOTE() \
-				/* printf("  [%llu]-->%s\n",k,SampStrings[ix]);  */\
+	for (uint32_t i = kv; i < length; ++i) { \
+		if (lv >= 1) { \
+			if (C2Xb[src[i-kv]] != 0) continue; \
+			if (lv >= 2) { \
+				if (C2Xb[src[i-kv+1]] != 2) continue; \
+				if (lv >= 3) { \
+					if (C2Xb[src[i-kv+2]] != 1) continue; \
+					if (lv >= 4) { \
+						if (C2Xb[src[i-kv+3]] != 3) continue; \
+					} \
+				} \
 			} \
+		} \
+		w = 0; \
+		uint32_t j = i - k1, p = j; \
+		for (; j <= i; ++j) { \
+			if (C2Xb[src[j]] == 255) {i += j - p + lv; break;} \
+			w <<= 2u, w |= C2Xb[src[j]]; \
+		} \
+		if (j <= i) continue; \
+		IXTYPE ix = XT_getIX32(utree, w); \
+		if (ix < maxIX) { \
+			++foundUniq; \
+			XT_PREP_VOTE() \
 		} \
 	}
 	// These are prototypes of the requisite XT_PREP_VOTE
@@ -1122,8 +1086,8 @@ static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, 
 			AllTheKingsHorses[++kingsMen] = ix;
 	#define XT_SHALLOWVOTE() \
 		/* simple vote: max taxid wins */ \
-		if (z >= nextValid) nextValid = z + PACKSIZE/SPARSITY,  \
-			AllTheKingsHorses[kingsMen++] = ix;
+		i += PACKSIZE/SPARSITY - 1;  \
+		AllTheKingsHorses[kingsMen++] = ix;
 	#ifndef TOLERANCE_THRESHOLD
 		#define TOLERANCE_THRESHOLD 2
 	#endif
@@ -1533,12 +1497,14 @@ int main(int argc, char *argv[]) {
 	#endif
 	#if defined SEARCH || defined SEARCH_GG
 	if (argc < 4) {
-		printf(VER " usage: xtree-search%s compTree.ctr fastaToSearch.fa output.txt [threads] [RC]\n",
+		printf(VER " usage: xtree-search%s compTree.ctr fastaToSearch.fa output.txt [threads] [SPEED <X>] [RC]\n",
 			DO_GG ? "GG" : ""); exit(1); }
 	printf("This is UTree " VER "\n");
 	int doRC = !strcmp(argv[argc-1],"RC"), threads = 1;
 	argc -= doRC; // get rid of last commandline
+	int speed = 0; if (!strcmp(argv[argc-2],"SPEED")) speed = atoi(argv[argc-1]), argc -= 2;
 	printf("Reverse complement consideration is %sabled.\n",doRC? "en" : "dis");
+	printf("Searching at speed %d.\n",speed);
 	#ifdef _OPENMP
 		threads = argc >= 5 ? atoi(argv[4]) : omp_get_max_threads();
 		omp_set_num_threads(threads);
@@ -1548,7 +1514,7 @@ int main(int argc, char *argv[]) {
 	#endif
 	UTree *xtr = XT_read32(argv[1], DO_GG ? ';' : 0); //("compTre.ctr");
 	printf("Searched %llu queries\n",
-		XT_doSearch32(xtr,argv[2],argv[3], DO_GG ? 8 : 0, doRC));
+		XT_doSearch32(xtr,argv[2],argv[3], DO_GG ? 8 : 0, speed, doRC));
 	exit(0);
 	#endif
 	#if defined BUILD || defined BUILD_GG

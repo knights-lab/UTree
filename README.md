@@ -1,5 +1,5 @@
 ### Download and run
-Download the newest zip file with the binaries for your system from our release page [here] (https://github.com/knights-lab/UTree/releases/latest). Unix (Mac and Linux) users: You may also have to set the files as executable with chmod +x utree-*
+Download the newest zip file with the binaries for your system from our release page [here](https://github.com/knights-lab/UTree/releases/latest). Unix (Mac and Linux) users: You may also have to set the files as executable with chmod +x utree-*
 
 ### Compilation (optional, only if you want to adjust internal parameters)
 

@@ -17,9 +17,10 @@ and can be interpreted by simple division (2;3 is 66.7% confidence at a given le
 Queries up to 16 megabases in length are supported, so you can assign taxonomy to whole bacterial genomes and long reads too.
 
 e.g:
+```
 <QUERY>	<TAXONOMY>	<TOTAL_K-MERS_IN_READ>	<SUPPORT_KINGDOM>	<SUPPORT_PHYLUM>	<SUPPORT_CLASS>	<SUPPORT_ORDER>	<SUPPORT_FAMILY>	<SUPPORT_GENUS>	<SUPPORT_SPECIES>	<SUPPORT_STRAIN>
 Even.40M.1.ninja.100000.4_318   k__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobacillales;f__Streptococcaceae;g__Streptococcus;s__;t__    21      3       21;21   21;21   21;21   21;21   21;21   21;21   2;3     0;0
-
+```
 
 ## To build a database:
 [v2.0 SigNature Edition] usage: utree-buildGG input_fasta.fa labels.map output.ubt threads(0=auto) [complevel]
@@ -27,9 +28,11 @@ Even.40M.1.ninja.100000.4_318   k__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobac
 
 
 Example: 
-```utree-buildGG myDatabase.fasta gg_format_taxonomy.txt temp.ubt 0 2
+```
+utree-buildGG myDatabase.fasta gg_format_taxonomy.txt temp.ubt 0 2
 utree-compress temp.ubt myDatabase.ctr
-rm temp.ubt```
+rm temp.ubt
+```
 
 
 ## Info:
@@ -51,8 +54,10 @@ AGCGACGTAGCTGAGCA
 
 
 gg_format_taxonomy.txt (seq name [spaces included!], tab, 8-level taxonomy with no spaces after semicolons):
-```my first reference sequence	k__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobacillales;f__Streptococcaceae;g__Streptococcus;s__;t__
-my second reference sequence	k__Bacteria;p__Proteobacteria;c__Alphaproteobacteria;o__Rhodobacterales;f__Rhodobacteraceae;g__Sulfitobacter;s__Sulfitobacter_mediterraneus;t__Sulfitobacter_mediterraneus_KCTC_32188```
+```
+my first reference sequence	k__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobacillales;f__Streptococcaceae;g__Streptococcus;s__;t__
+my second reference sequence	k__Bacteria;p__Proteobacteria;c__Alphaproteobacteria;o__Rhodobacterales;f__Rhodobacteraceae;g__Sulfitobacter;s__Sulfitobacter_mediterraneus;t__Sulfitobacter_mediterraneus_KCTC_32188
+```
 
 ## To cite: See release: https://github.com/knights-lab/UTree/releases/tag/v2.0c
 
@@ -63,27 +68,40 @@ ERRATA/MISC/TODO:
 - SEARCH can be sped up with more efficient I/O
 
 TO COMPILE RANK-SPECIFIC (GCC and/or ICC and/or OpenMP+Clang+GNU extensions required to build):
+```
 gcc -std=gnu11 -m64 -O3 itree.c -fopenmp -D BUILD -o utree-build
 gcc -std=gnu11 -m64 -O3 itree.c -fopenmp -D COMPRESS -o xtree-compress
 gcc -std=gnu11 -m64 -O3 itree.c -fopenmp -D SEARCH -o xtree-search
+```
+
 
 AND/OR RANK-FLEXIBLE (the COMPRESS stays the same):
+```
 gcc -std=gnu11 -m64 -O3 itree.c -fopenmp -D BUILD_GG -o utree-buildGG
 gcc -std=gnu11 -m64 -O3 itree.c -fopenmp -D SEARCH_GG -o xtree-searchGG
+```
 
 OPTIONAL COMPILER FLAGS (USE ON ALL BUILDS):
 -D IXTYPE=uint32_t (if you have more than 64,000 unique labels or expect to extrapolate that many)
 -D PACKSIZE=64 (if you want to use 64-mers instead of the default 32-mers. 4,8,and 16 are also valid k here)
 -D PFBITS=26 (for larger desktops; only affects build. Basically this lets the program take more RAM to build a DB faster. Even numbers up to 30 are also possible for SUPER SERVERS with > 128GB RAM)
 
+
 QUERY BEHAVIOR COMPILER FLAGS (RANK-SPECIFIC)
+
 -D SLACK=X
+
 -D SPARSITY=Y
+
 per query controls.
+
 So for a given query, recall that the program slides along the query one base at a time (full k-1 overlap) and checks that k-mer against the utree database to see if it uniquely matches something. 
+
 
 SLACK is the number of times more the majority assignment must appear than the next most-count assignment.
 So if a query matches 5 times to one species and 2 times to another, the ratio 5/2 is 2.5, which is less than a slack of 3, so its assignment is considered chimeric and it is not assigned. This only applies to rank-specific voting; optimal aufbau voting is implemented in search-gg (rank-flexible)
 
+
 SPARSITY is the number of bases that have to elapse in the query before a series of identical consecutive calls can be counted twice.
+
 So with SPARSITY=4, if a query matches species X, then slides a base and matches X, and another, and another, every time matching X in all 4 slides, it's only counted as one match to X. A series of matches can be interrupted and reset by matching to Y (a different species). A rule of thumb would be to set this between 1/4 and 1/8 of the database overlap size. Again, this only applies to rank-specific voting.

@@ -1,36 +1,68 @@
-### Download and run
-Download the newest zip file with the binaries for your system from our release page [here](https://github.com/knights-lab/UTree/releases/latest). Unix (Mac and Linux) users: You may also have to set the files as executable with chmod +x utree-*
+### UWho?
+UTree is an ultra-fast (up to 2x faster than Kraken) metagenomic profiling tool. Its database and RAM usage is an order of magnitude smaller than Kraken's, and it has greater specifity/precision with comparable recall after Bracken-like redistribution of lower-rank hits. It is distributed as a single static binary on Linux (and compiles for Mac and Windows) with no dependencies. It has a flexible compression parameter that allows the user to tune the size of the database at the expense of precision and recall. On a RefSeq representative genomes database containing over 5,000 prokaryotic genomes and over 7,000 viruses, the highest-compressed (L4) database consumes 500MB of memory and storage, making it feasible to run on a mobile device or phone, including running on long-read sequence data. The standard-compressed database (L2) of the same takes under 8GB of storage and RAM during alignment, and assigns dynamically interpolated taxonomy to reads at the rate of 16 million reads per minute on a 32-core Ivy Bridge server, or ~2 million reads per minute on an 8GB RAM Macbook Air. 
 
-### Compilation (optional, only if you want to adjust internal parameters)
+## To search a database:
+[v1.5a] usage: xtree-searchGG compTree.ctr fastaToSearch.fa output.txt [threads] [RC]
 
-This set of compilation instructions are for Windows (msys/BASH environment) and Linux users only. Mac users will not be able to run these commands unless they have a real version of gcc (not the default clang). 
+Example: utree-searchGG rep82.gg.ctr seqs.fna classifications.txt 96 RC
 
-```
-# Clone UTree
-git clone https://github.com/knights-lab/UTree.git
+Info:
+The program will only use about 8.5GB of RAM (although it may appear to reserve more with many threads). 
+The inputs are the CTR (compressed tree) and linearized FASTA file (alternating lines of header and sequence
+with no line breaks in the sequences). The output is a simple text file listing the queries and their
+interpolated classification, followed by (tabular) the number of k-mers matched in that read, the number among 
+these that map to unique taxa records, then either a star (if only one unique record matched) or a per-level
+support listing from kingdom to strain (k, p, c, o, f, g, s, t) in the format SUPPORTING_K-MERS;BAYESIAN_RANGE
+and can be interpreted by simple division (2;3 is 66.7% confidence at a given level). 
+Queries up to 16 megabases in length are supported, so you can assign taxonomy to whole bacterial genomes and long reads too.
 
-# Make UTree
-cd UTree
-make
-```
+e.g:
+<QUERY>	<TAXONOMY>	<TOTAL_K-MERS_IN_READ>	<SUPPORT_KINGDOM>	<SUPPORT_PHYLUM>	<SUPPORT_CLASS>	<SUPPORT_ORDER>	<SUPPORT_FAMILY>	<SUPPORT_GENUS>	<SUPPORT_SPECIES>	<SUPPORT_STRAIN>
+Even.40M.1.ninja.100000.4_318   k__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobacillales;f__Streptococcaceae;g__Streptococcus;s__;t__    21      3       21;21   21;21   21;21   21;21   21;21   21;21   2;3     0;0
 
-Instructions:
-- Needs linearized, newline terminated (including trailing newline at end of file) FASTA format and a simple tab delimited map of [header] to [taxon].
-- Mapping file specifics: [Taxon] can be any string without tab or null or newline. If doing rank-flexible (MAKE_GG or SEARCH_GG), it additionally needs to exactly respect the greengenes formatting standard including single-letter taxon labels, underscores, and spaces after the delimiting semicolons. A single label can map to multiple fasta sequences as long as the fasta sequences share a name (up to the terminating delimiter discussed below). It does not need to be sorted or deduplicated.
-- FASTA file specifics: parsing stops at first encountered of the following: null, newline, underscore. Don't include tabs either as they will make the corresponding map unreadable (it is tab delimited). The string up to the end will be the label the program searches for in the mpping file to identify taxonomy information for the sequences. All sequences need to be accounted for in the map.
 
-Took a trip down memory lane, brought up the code, and lo and behold... all sorts of small goodies to tweak. So here's a new version. With all info in the same place this time hopefully.
-CHANGES:
-- Supports up to 268 megabases per line in a FASTA file. That's bigger than human chromosome 1. Let me know if you need the limit removed
-- Better defaults for compiler flags; a couple removed
-- Slightly better usage, error messages (still needs a rewrite to be a "real"/"pure" program)
+## To build a database:
+[v2.0 SigNature Edition] usage: utree-buildGG input_fasta.fa labels.map output.ubt threads(0=auto) [complevel]
+[v1.5a] usage: xtree-compress preTree.ubt compTree.ctr
 
+
+Example: 
+```utree-buildGG myDatabase.fasta gg_format_taxonomy.txt temp.ubt 0 2
+utree-compress temp.ubt myDatabase.ctr
+rm temp.ubt```
+
+
+## Info:
+This 2-step procedure constructs a database out of arbitrary reference sequences and their associated taxonomy. 
+By default, UTree will not bother creating nodes below phylum level as they are too vague. The complevel value (2)
+controls the sparsity of sampling the reference genomes. Larger values up to 4 (default is 1) decrease database 
+size at the cost of sensitivity. Can be set to 0 for ultra-dense complete sampling. A value of 2 means the 
+database size will be approximately equal to 1/3 the size of the original FASTA file. 1 = same size, 4 = 1/40.
+Because the final compressed database is a complete, in-RAM searchable database, RAM requirements during search 
+will almost exactly mirror the storage requirements for the final CTR database. 
+
+File formats:
+The fasta and taxonomy map formatting must be as follows, with sequence records up to 256 megabases (NO LINE BREAKS):
+myDatabase.fasta (typical linearized fasta without line breaks):
+>my first reference sequence
+GACGATGCTAGCTGATCGATCGTGACTGCATGCTCAGTCGA
+>my second reference sequence 
+AGCGACGTAGCTGAGCA
+
+
+gg_format_taxonomy.txt (seq name [spaces included!], tab, 8-level taxonomy with no spaces after semicolons):
+```my first reference sequence	k__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobacillales;f__Streptococcaceae;g__Streptococcus;s__;t__
+my second reference sequence	k__Bacteria;p__Proteobacteria;c__Alphaproteobacteria;o__Rhodobacterales;f__Rhodobacteraceae;g__Sulfitobacter;s__Sulfitobacter_mediterraneus;t__Sulfitobacter_mediterraneus_KCTC_32188```
+
+## To cite: See release: https://github.com/knights-lab/UTree/releases/tag/v2.0c
+
+## Misc
 ERRATA/MISC/TODO:
 - Should fail more gracefully if 0 leaves added
-- COMPRESS makes trees way way bigger if they're small (e.g. toy goes from ~10kb to >60 MB)
-- SEARCH is single threaded; multi-thread this guy!
+- COMPRESS makes trees way way bigger if original data is super small (e.g. toy tree goes from ~10kb to >60 MB)
+- SEARCH can be sped up with more efficient I/O
 
-TO COMPILE RANK-SPECIFIC:
+TO COMPILE RANK-SPECIFIC (GCC and/or ICC and/or OpenMP+Clang+GNU extensions required to build):
 gcc -std=gnu11 -m64 -O3 itree.c -fopenmp -D BUILD -o utree-build
 gcc -std=gnu11 -m64 -O3 itree.c -fopenmp -D COMPRESS -o xtree-compress
 gcc -std=gnu11 -m64 -O3 itree.c -fopenmp -D SEARCH -o xtree-search
@@ -42,9 +74,9 @@ gcc -std=gnu11 -m64 -O3 itree.c -fopenmp -D SEARCH_GG -o xtree-searchGG
 OPTIONAL COMPILER FLAGS (USE ON ALL BUILDS):
 -D IXTYPE=uint32_t (if you have more than 64,000 unique labels or expect to extrapolate that many)
 -D PACKSIZE=64 (if you want to use 64-mers instead of the default 32-mers. 4,8,and 16 are also valid k here)
--D PFBITS=26 (for larger desktops; only affects build. Basically this lets the program take more RAM to build a DB faster. Even numbers up to 32 are also possible for SUPER SERVERS; I'd suggest 28 for tminx)
+-D PFBITS=26 (for larger desktops; only affects build. Basically this lets the program take more RAM to build a DB faster. Even numbers up to 30 are also possible for SUPER SERVERS with > 128GB RAM)
 
-QUERY BEHAVIOR COMPILER FLAGS
+QUERY BEHAVIOR COMPILER FLAGS (RANK-SPECIFIC)
 -D SLACK=X
 -D SPARSITY=Y
 per query controls.

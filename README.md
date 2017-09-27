@@ -1,4 +1,4 @@
-### UWho?
+# UWho?
 UTree is an ultra-fast (up to 2x faster than Kraken) metagenomic profiling tool. Its database and RAM usage is an order of magnitude smaller than Kraken's, and it has greater specifity/precision with comparable recall after Bracken-like redistribution of lower-rank hits. It is distributed as a single static binary on Linux (and compiles for Mac and Windows) with no dependencies. It has a flexible compression parameter that allows the user to tune the size of the database at the expense of precision and recall. On a RefSeq representative genomes database containing over 5,000 prokaryotic genomes and over 7,000 viruses, the highest-compressed (L4) database consumes 500MB of memory and storage, making it feasible to run on a mobile device or phone, including running on long-read sequence data. The standard-compressed database (L2) of the same takes under 8GB of storage and RAM during alignment, and assigns dynamically interpolated taxonomy to reads at the rate of 16 million reads per minute on a 32-core Ivy Bridge server, or ~2 million reads per minute on an 8GB RAM Macbook Air. 
 
 ## To search a database:
@@ -44,14 +44,15 @@ database size will be approximately equal to 1/3 the size of the original FASTA 
 Because the final compressed database is a complete, in-RAM searchable database, RAM requirements during search 
 will almost exactly mirror the storage requirements for the final CTR database. 
 
-File formats:
+### File formats:
 The fasta and taxonomy map formatting must be as follows, with sequence records up to 256 megabases (NO LINE BREAKS):
 myDatabase.fasta (typical linearized fasta without line breaks):
+```
 >my first reference sequence
 GACGATGCTAGCTGATCGATCGTGACTGCATGCTCAGTCGA
 >my second reference sequence 
 AGCGACGTAGCTGAGCA
-
+```
 
 gg_format_taxonomy.txt (seq name [spaces included!], tab, 8-level taxonomy with no spaces after semicolons):
 ```
@@ -82,18 +83,18 @@ gcc -std=gnu11 -m64 -O3 itree.c -fopenmp -D SEARCH_GG -o xtree-searchGG
 ```
 
 OPTIONAL COMPILER FLAGS (USE ON ALL BUILDS):
+```
 -D IXTYPE=uint32_t (if you have more than 64,000 unique labels or expect to extrapolate that many)
 -D PACKSIZE=64 (if you want to use 64-mers instead of the default 32-mers. 4,8,and 16 are also valid k here)
 -D PFBITS=26 (for larger desktops; only affects build. Basically this lets the program take more RAM to build a DB faster. Even numbers up to 30 are also possible for SUPER SERVERS with > 128GB RAM)
-
+```
 
 QUERY BEHAVIOR COMPILER FLAGS (RANK-SPECIFIC)
-
+```
 -D SLACK=X
-
 -D SPARSITY=Y
-
-per query controls.
+```
+These are the per query controls.
 
 So for a given query, recall that the program slides along the query one base at a time (full k-1 overlap) and checks that k-mer against the utree database to see if it uniquely matches something. 
 

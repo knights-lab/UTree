@@ -49,3 +49,4 @@ gg_format_taxonomy.txt (seq name [spaces included!], tab, 8-level taxonomy with 
 my first reference sequence	k__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobacillales;f__Streptococcaceae;g__Streptococcus;s__;t__
 my second reference sequence	k__Bacteria;p__Proteobacteria;c__Alphaproteobacteria;o__Rhodobacterales;f__Rhodobacteraceae;g__Sulfitobacter;s__Sulfitobacter_mediterraneus;t__Sulfitobacter_mediterraneus_KCTC_32188
 
+## To cite: See release: https://github.com/knights-lab/UTree/releases/tag/v2.0c

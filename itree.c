@@ -71,6 +71,8 @@ off_t lseek(int fd, off_t offset, int whence);
 const char* TYPEARR[17] = {"NA","uint8_t", "uint16_t","NA","uint32_t",
 "NA","NA","NA","uint64_t","NA","NA","NA","NA","NA","NA","NA","__uint128_t"};
 
+unsigned critical_cutoff = 2;
+
 typedef struct KMerY KMerY;
 struct 
 /* __attribute__ ((__packed__))  */
@@ -234,7 +236,7 @@ inline IXTYPE addSampleU(UTree *ktree, char *str) {
 }
 #undef DO_SAMPCNTS
 #define DO_SAMPCNTS EXPAND_SAMPCNTS
-inline IXTYPE addSampleUdX(UTree *ktree, char *str) { ADDSAMP() }
+static IXTYPE addSampleUdX(UTree *ktree, char *str) { ADDSAMP() }
 
 // returns node status: -1 = just went bad, 0 = no change, 1 = just created
 inline int xeTreeU(KMerY *tree, WTYPE word, IXTYPE ix) { 
@@ -263,7 +265,7 @@ inline int xeTreeU(KMerY *tree, WTYPE word, IXTYPE ix) {
 	return 0;
 }
 // returns node status as above; 2+ = converted to new ix
-inline long xeTreeU_GG(KMerY *tree, WTYPE word, IXTYPE ix, UTree *ut) { 
+static long xeTreeU_RF(KMerY *tree, WTYPE word, IXTYPE ix, UTree *ut) { 
 	do {
 		if (word > tree->word) { // go right
 			if (!tree->right) {
@@ -281,38 +283,19 @@ inline long xeTreeU_GG(KMerY *tree, WTYPE word, IXTYPE ix, UTree *ut) {
 		}
 	} while (word != tree->word);
 	if (ix != tree->ix) {
-		//tree->ix = BAD_IX;
 		if (tree->ix >= EMPTY_IX) return 0; // already bad
 		char *old = ut->SampStrings[tree->ix], *oldOrig = old;
 		char *new = ut->SampStrings[ix];
 		
 		unsigned numP = 0, ixP = 0;
-		while (*++old == *++new) 
+		while (*old == *new) {
 			if (*old == ';') ++numP, ixP = old - oldOrig;
-		
-		char buffer[10000] = {0};
-		strcpy(buffer,oldOrig);
-		//exit(3);
-		if (numP < 2) { tree->ix = BAD_IX; return -1; }
-		//printf("old = %s\nnew = %s\n",oldOrig,ut->SampStrings[ix]);
-		//printf("--> Conserved num semis = %u, position = %u\n",numP, ixP);
-		if (numP == 0) // kingdom diverged
-			++numP, strcpy(buffer,"k__;"), ixP = 2; 
-		if (numP == 1)
-			++numP, strcpy(buffer + ixP + 1,"p__;"), ixP += 4;
-		if (numP == 2)
-			++numP, strcpy(buffer + ixP + 1,"c__;"), ixP += 4;
-		if (numP == 3)
-			++numP, strcpy(buffer + ixP + 1,"o__;"), ixP += 4;
-		if (numP == 4)
-			++numP, strcpy(buffer + ixP + 1,"f__;"), ixP += 4;
-		if (numP == 5)
-			++numP, strcpy(buffer + ixP + 1,"g__;"), ixP += 4;
-		if (numP == 6)
-			++numP, strcpy(buffer + ixP + 1,"s__;"), ixP += 4;
-		if (numP == 7) // strain diverged
-			strcpy(buffer + ixP + 1,"t__");
-		//printf("--> Interpolated: %s\n",buffer);
+			++old, ++new;
+		}
+		if (numP < critical_cutoff) { tree->ix = BAD_IX; return -1; }
+		char buffer[UINT16_MAX+1];
+		memcpy(buffer,oldOrig,ixP);
+		buffer[ixP] = 0;
 		IXTYPE new_ix = addSampleUd(ut,buffer);
 		
 		//printf("--> New IX = %u [old=%u]\n",new_ix,tree->ix);
@@ -362,99 +345,6 @@ inline int parapluieU(UTree *ktree, WTYPE wordO, IXTYPE ix) {
 	++ktree->TotalCounts[prefix]; 
 	return z/denom; /*2*z/(denom+1); */
 }
-//count
-
-// Search and report if word made bad
-#define UMBRELLA() { \
-	do { \
-		if (word > tree->word) { \
-			if (!tree->right) return 0; \
-			tree = tree->right; \
-		} \
-		else if (word < tree->word) { \
-			if (!tree->left) return 0; \
-			tree = tree->left; \
-		} \
-	} while (word != tree->word); \
-	if (tree->ix == BAD_IX) return 0; \
-	if (ix != tree->ix) UPDATE_IX() \
-	return 0; \
-}
-#define UPDATE_IX_REG() {tree->ix = BAD_IX; return 1;}
-#define UPDATE_IX_GG() { \
-	if (tree->ix >= EMPTY_IX) return 0; \
-	char *old = ut->SampStrings[tree->ix], *oldOrig = old; \
-	char *new = ut->SampStrings[ix]; \
-	\
-	unsigned numP = 0, ixP = 0; \
-	while (*++old == *++new) \
-		if (*old == ';') ++numP, ixP = old - oldOrig; \
-	\
-	char buffer[10000] = {0}; \
-	strcpy(buffer,oldOrig); \
-	if (numP < 2) { tree->ix = BAD_IX; return 1; } \
-	if (numP == 0) \
-		++numP, strcpy(buffer,"k__;"), ixP = 2; \
-	if (numP == 1) \
-		++numP, strcpy(buffer + ixP + 1,"p__;"), ixP += 4; \
-	if (numP == 2) \
-		++numP, strcpy(buffer + ixP + 1,"c__;"), ixP += 4; \
-	if (numP == 3) \
-		++numP, strcpy(buffer + ixP + 1,"o__;"), ixP += 4; \
-	if (numP == 4) \
-		++numP, strcpy(buffer + ixP + 1,"f__;"), ixP += 4; \
-	if (numP == 5) \
-		++numP, strcpy(buffer + ixP + 1,"g__;"), ixP += 4; \
-	if (numP == 6) \
-		++numP, strcpy(buffer + ixP + 1,"s__;"), ixP += 4; \
-	if (numP == 7) \
-		strcpy(buffer + ixP + 1,"t__"); \
-	IXTYPE new_ix = addSampleUd(ut,buffer); \
-	tree->ix = new_ix; \
-	return 0; \
-}
-
-#define UPDATE_IX UPDATE_IX_REG
-inline size_t umbrellaU(KMerY *tree, STYPE word, IXTYPE ix) UMBRELLA() 
-inline size_t umbrellaUx(KMerY *tree, STYPE word, IXTYPE ix) UMBRELLA() 
-#undef UPDATE_IX
-#define UPDATE_IX UPDATE_IX_GG
-inline size_t umbrellaU_GG(KMerY *tree, STYPE word, IXTYPE ix, UTree *ut) UMBRELLA()
-
-#define CHECK_UMBRELLA() { \
-size_t length = utree->queuedClumps; \
-	utree->queuedClumps = 0; \
-	WordIxPair *Pairs = utree->Pairs; \
-	_Pragma("omp parallel for schedule(dynamic,1000) \
-		shared(utree,Pairs)") \
-	for (size_t i = 0; i < length; ++i) { \
-		WTYPE word = Pairs[i].word; \
-		UMB_FUNC(utree->Roots[word >> ((PACKSIZE << 1) - \
-			PFBITS)], (word << PFBITS) >> PFBITS, Pairs[i].ix); \
-	} \
-}
-#define UMB_FUNC umbrellaU
-void checkUmbrellaU(UTree *utree) CHECK_UMBRELLA()
-#undef UMB_FUNC
-#define UMB_FUNC umbrellaUx
-void checkUmbrellaUx(UTree *utree) CHECK_UMBRELLA()
-#undef UMB_FUNC
-#define UMB_FUNC(a,b,c) umbrellaU_GG(a,b,c,utree)
-void checkUmbrellaU_GG(UTree *utree) CHECK_UMBRELLA()
-#undef UMB_FUNC
-
-void checkAndNullU(UTree *utree, WordIxPair pair) {
-	utree->Pairs[utree->queuedClumps] = pair;
-	if (++utree->queuedClumps == FIRETHRES) checkUmbrellaU(utree);
-}
-void checkAndNullU_GG(UTree *utree, WordIxPair pair) {
-	utree->Pairs[utree->queuedClumps] = pair;
-	if (++utree->queuedClumps == FIRETHRES) checkUmbrellaU_GG(utree);
-}
-inline void checkAndNullUx(UTree *utree, WordIxPair pair) {
-	utree->Pairs[utree->queuedClumps] = pair;
-	if (++utree->queuedClumps == FIRETHRES) checkUmbrellaUx(utree);
-}
 
 void traceBalanceU(KMerY *tree, KMerY **array, size_t *ix) {
 	if (tree->left) traceBalanceU(tree->left, array, ix);
@@ -470,9 +360,6 @@ void traceBalancePurgeU(KMerY *tree, KMerY **array, size_t *ix, size_t *cnt) {
 
 void buildBalanceLU(KMerY *tree, KMerY **array, size_t sz);
 void buildBalanceRU(KMerY *tree, KMerY **array, size_t sz);
-void buildBalanceLdU(KMerY *tree, KMerY *array, size_t sz, size_t *cnt);
-void buildBalanceRdU(KMerY *tree, KMerY *array, size_t sz, size_t *cnt);
-
 #define BUILDBALANCEU() \
 	if (!sz) { \
 		CHILD = *array; \
@@ -485,18 +372,6 @@ void buildBalanceRdU(KMerY *tree, KMerY *array, size_t sz, size_t *cnt);
 	if (ix) buildBalanceLU(CHILD,array,ix-1); \
 	else CHILD->left = 0; \
 	buildBalanceRU(CHILD,array+(ix+1), sz-(ix+1));
-#define BUILDBALANCEDIRECT() \
-	if (!sz) { \
-		CHILD = array; \
-		CHILD->left = 0; \
-		CHILD->right = 0; \
-		return; \
-	} \
-	size_t ix = sz >> 1; \
-	CHILD = array + ix; \
-	if (ix) LDBUILD(CHILD,array,ix-1, cnt); \
-	else CHILD->left = 0; \
-	RDBUILD(CHILD,array+(ix+1), sz-(ix+1),cnt);
 
 // set a branch of the given tree, and recurse with that branch as root
 void buildBalanceLU(KMerY *tree, KMerY **array, size_t sz) {
@@ -510,20 +385,6 @@ void buildBalanceRU(KMerY *tree, KMerY **array, size_t sz) {
 	#undef CHILD
 }
 
-#define LDBUILD buildBalanceLdU
-#define RDBUILD buildBalanceRdU
-void buildBalanceLdU(KMerY *tree, KMerY *array, size_t sz, size_t *cnt) {
-	#define CHILD tree->left
-		BUILDBALANCEDIRECT()
-	#undef CHILD
-}
-void buildBalanceRdU(KMerY *tree, KMerY *array, size_t sz, size_t *cnt) {
-	#define CHILD tree->right
-		BUILDBALANCEDIRECT()
-	#undef CHILD
-}
-#undef LDBUILD
-#undef RDBUILD
 char * print_bignum(WTYPE n, char *str) {
 	//char str[40] = {0}; // log10(1 << 128) + '\0'
 	if (n == 0) return str;
@@ -593,7 +454,7 @@ void UT_addWordIx(UTree *utree, WTYPE word, IXTYPE ix) {
 	} 
 }
 
-void UT_addWordIxGG(UTree *utree, WTYPE word, IXTYPE ix) {
+void UT_addWordIxRF(UTree *utree, WTYPE word, IXTYPE ix) {
 	PFTYPE prefix = word >> ((PACKSIZE << 1) - PFBITS); 
 	STYPE suffix = (word << PFBITS) >> PFBITS; 
 	++utree->TotalCounts[prefix];
@@ -602,7 +463,7 @@ void UT_addWordIxGG(UTree *utree, WTYPE word, IXTYPE ix) {
 		(KMerY){suffix,ix,0,0}, utree->NumsInserted[prefix]=1; 
 		return; 
 	} 
-	if (xeTreeU_GG(utree->Roots[prefix],suffix,ix,utree)==1) ++utree->NumsInserted[prefix]; 
+	if (xeTreeU_RF(utree->Roots[prefix],suffix,ix,utree)==1) ++utree->NumsInserted[prefix]; 
 	if (utree->NumsInserted[prefix] == utree->BalanceThreshes[prefix]) { 
 		utree->Roots[prefix] = simpleBalanceU(utree->Roots[prefix], 
 			utree->NumsInserted[prefix]); 
@@ -658,9 +519,7 @@ int ixCol, int lblCol, uint32_t lv, int doGG) {
 	if (!lblList || !ixList) {puts("Map list err."); exit(2);}
 	//FILE *outfile = fopen("outfile_temp_db.txt","wb");
 	ptr = dump; 
-	void (*addWord)(UTree *, WTYPE, IXTYPE) = doGG ? 
-		&UT_addWordIxGG : &UT_addWordIx, (*screenWord)(UTree *, WordIxPair) =
-		doGG ? &checkAndNullU_GG : &checkAndNullU; // dynamic recompilation
+	void (*addWord)(UTree *, WTYPE, IXTYPE) = doGG ? &UT_addWordIxRF : &UT_addWordIx; 
 	if (ixCol < lblCol) for (size_t i = 0; i < lines; ++i) { //default
 		int j = 0;
 		for (; j < ixCol; ++j) {
@@ -971,7 +830,7 @@ UTree *XT_read32(char *db, char delim) {
 typedef struct {char *s; uint32_t n;} String_Count_t;
 static int byStr(const void *A, const void *B) {
 	return strcmp(((String_Count_t *)A)->s, ((String_Count_t *)B)->s);}
-static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse, uint32_t lv, int doRC) {
+static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, int doCollapse, int lv, int doRC) {
 	FILE *fp = fopen(filename, "rb"), *fpo = fopen(outfile, "wb");
 	if (fp == NULL) { puts("Invalid input files"); exit(1); }
 	static const size_t LINELEN = 16777216; // 16MB lines
@@ -996,24 +855,24 @@ static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, 
 	IXTYPE maxIX = utree->sampIX + 1;
 	char **SampStrings = utree->SampStrings;
 	uint8_t *semicolons = utree->semicolons;
-	const uint32_t k1 = PACKSIZE - 1; uint32_t kv = k1 + lv;
+	const int k1 = PACKSIZE - 1; int kv = k1 /*+ lv*/;
 	
 	#define XT_INITIATE_WS() \
 	char *line = malloc(LINELEN*2 + 2), *line2 = malloc(LINELEN*2 + 2), stop=0; \
 	if (!line || !line2) {fputs("OOM:lineIn\n",stderr); exit(3);} \
 	line[LINELEN-1] = 0, line[LINELEN*2+1] = 0; \
 	line2[LINELEN-1] = 0, line2[LINELEN*2+1] = 0; \
+	uint64_t ns = 0; \
 	for (;;) { \
 		_Pragma("omp critical") \
 		{ \
 			line = fgets(line,LINELEN,fp); \
 			if (line) { \
 				line2 = fgets(line2,LINELEN,fp); \
-				if (!line2) { fprintf(stderr,"ERROR: can't read sequence L %u\n"); exit(2); } \
+				if (!line2) { fprintf(stderr,"ERROR: can't read sequence L %u\n",ns); exit(2); } \
 			} else stop = 1; \
 		} \
 		if (stop) break; \
-		uint64_t ns; \
 		_Pragma("omp atomic capture") \
 		ns = ++li; \
 		if (!(ns & 1048575)) printf("Searched %llu queries...\n",ns); \
@@ -1025,16 +884,16 @@ static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, 
 		/* if (ns > 729500) printf("SEQUENCE %u: %s\n",ns,line+1); */ \
 		src = line2; \
 		if (*src == '>') {fprintf(stderr,"ERROR: sequence begins '>' [L %u, '%s']\n",ns,src); exit(2);} \
-		register uint32_t length = strlen(src); \
+		register int length = strlen(src); \
 		if (!length) {fprintf(stderr,"ERROR: empty query line %u\n",ns); exit(2);} \
 		if (src[length-1] == '\n') --length; /* lop off newline(s) */ \
 		if (src[length-1] == '\r') --length; /* supports every platform! */ \
 		if (doRC) { \
 			src[length] = 'N'; \
-			src[2*length+1] = 0; \
-			for (uint32_t x = length+1; x <= 2*length; ++x) \
+			src[(length << 1)+1] = 0; \
+			for (int x = length+1; x <= length << 1; ++x) \
 				src[x] = RC[src[length+length-x]]; \
-			length = 2*length + 1; \
+			length = (length << 1) + 1; \
 			/* printf("Sequence with recvomp is: %s\n",src); */ \
 		} \
 		WTYPE w = 0; \
@@ -1044,8 +903,8 @@ static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, 
 	#define XT_WORD_SEARCH() \
 	/* search for words in tree */ \
 	/* printf("Conidering: \n"); */ \
-	for (uint32_t i = kv; i < length; ++i) { \
-		if (lv >= 1) { \
+	for (int i = kv, z = -4; i < length; ++i) { \
+		/*if (lv >= 1) { \
 			if (C2Xb[src[i-kv]] != 0) continue; \
 			if (lv >= 2) { \
 				if (C2Xb[src[i-kv+1]] != 2) continue; \
@@ -1056,14 +915,16 @@ static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, 
 					} \
 				} \
 			} \
-		} \
-		w = 0; \
-		uint32_t j = i - k1, p = j; \
-		for (; j <= i; ++j) { \
-			if (C2Xb[src[j]] == 255) {i += j - p + lv; break;} \
+		} \*/ \
+		int j; \
+		if (i < z + kv) w <<= (i-z-1) << 1, j = z + 1; \
+		else w = 0, j = i - k1; \
+		for (int p = j; j <= i; ++j) { \
+			if (C2Xb[src[j]] == 255) {i += j - p /*+ lv*/, z = 0; break;} \
 			w <<= 2u, w |= C2Xb[src[j]]; \
 		} \
 		if (j <= i) continue; \
+		z = i; \
 		IXTYPE ix = XT_getIX32(utree, w); \
 		if (ix < maxIX) { \
 			++foundUniq; \
@@ -1150,7 +1011,7 @@ static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, 
 			// Full aufbau
 			uint32_t *Hashes = calloc(maxIX,sizeof(*Hashes));
 			String_Count_t *Tax_Cnt = malloc(maxIX*sizeof(*Tax_Cnt));
-			char Taxon[4096] = {0};
+			char Taxon[UINT16_MAX+1] = {0};
 			IXTYPE *AllTheKingsHorses = malloc(LINELEN*2*sizeof(IXTYPE));
 			int kingsMen = 0, humpty, togetherAgain;
 			if (!(Tax_Cnt && Hashes && Taxon && AllTheKingsHorses)) 
@@ -1177,13 +1038,11 @@ static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, 
 					Hashes[t] = 0;
 				if (uix == 1) {
 					fprintf(fpo,"%s\t%s\t%u\t1\t*\n",line+1,SampStrings[*AllTheKingsHorses],foundUniq); continue; }
-				//if (ns > 729500) for (uint32_t i = 0; i < foundUniq; ++i) printf("%u ",AllTheKingsHorses[i]);
-				//if (ns > 729500) for (uint32_t i = 0; i < uix; ++i) printf("\n[%u] %s\n",Tax_Cnt[i].n,Tax_Cnt[i].s);
 				qsort(Tax_Cnt, uix, sizeof(*Tax_Cnt), byStr);
 				
 				//for (uint32_t i = 0; i < uix; ++i) printf("[%u] %s\n",Tax_Cnt[i].n,Tax_Cnt[i].s);
 				uint32_t cutoff = foundUniq - foundUniq/TAXACUT, lv = 0, 
-					st = 0, ed = uix, dv = -1, orun = foundUniq, sl[8] = {0}, ol[8]={0};
+					st = 0, ed = uix, dv = -1, orun = foundUniq, sl, ol; // sl[INT16_MAX+1], ol[8]={0};
 				cutoff += foundUniq >> 1 >= cutoff;
 				for (;;) {
 					uint32_t run = Tax_Cnt[st].n, td = dv, adj = 0; 
@@ -1209,33 +1068,33 @@ static inline size_t XT_doSearch32(UTree *utree, char* filename, char* outfile, 
 						else if (run >= cutoff) {ed = z; break;}
 						else run = Tax_Cnt[z].n, st = z;
 					}
-					sl[lv] = run, ol[lv]=orun; //*100/orun;
+					sl = run, ol=orun; //*100/orun;
 					if (run < cutoff) break;
 					if (st + 1 >= ed) {
 						#ifdef DEBUG
 						if (!ed || ed > uix) printf("ERROR 038: [%u] ed is %u [0 %u]\n",ns,ed,uix); 
 						else 
 						#endif
-							if (Tax_Cnt[ed-1].n >= cutoff) dv = -2, lv = 8;
+							if (Tax_Cnt[ed-1].n >= cutoff) dv = -2, lv = INT16_MAX;
 						break;
 					}
-					if (!Tax_Cnt[ed-1].s[td] || Tax_Cnt[ed-1].s[td]==';') sl[++lv] = run, ol[lv] = orun; //*100/orun;
+					if (!Tax_Cnt[ed-1].s[td] || Tax_Cnt[ed-1].s[td]==';') ++lv, sl = run, ol = orun; //*100/orun;
 					orun = run;
 					dv = td;
 					cutoff = run - run/TAXACUT;
 					cutoff += run >> 1 >= cutoff;
 				}
 				char *toPrint = dv == -1 ? "" : dv == -2 ? Tax_Cnt[ed-1].s : Taxon;
-				if (dv < -2) memcpy(Taxon,Tax_Cnt[ed-1].s,dv), Taxon[dv] = 0;
+				if (dv < -2) memcpy(Taxon,Tax_Cnt[ed-1].s,dv), Taxon[dv] = 0; 
 				#ifdef DEBUG
-				if (lv > 8 && dv < -2) {
+				if (lv > INT16_MAX && dv < -2) {
 					printf("Warning: LV %u interpolated on seq %u [%s----%s] %u, %u\n",lv,ns,toPrint,Tax_Cnt[ed-1].s,st,ed); 
 					//for (uint32_t i = 0; i < uix; ++i) printf("<%u>--> [%u] %s\n",ns,Tax_Cnt[i].n,Tax_Cnt[i].s);
 				}
 				#endif
 				//printf("--> %s---%s\n\n",toPrint,PADTX[lv]);
-				fprintf(fpo,"%s\t%s%s\t%u\t%u\t%u;%u\t%u;%u\t%u;%u\t%u;%u\t%u;%u\t%u;%u\t%u;%u\t%u;%u\n",line+1,toPrint,PADTX[lv > 8 ? 8 : lv],
-					foundUniq,uix,sl[0],ol[0],sl[1],ol[1],sl[2],ol[2],sl[3],ol[3],sl[4],ol[4],sl[5],ol[5],sl[6],ol[6],sl[7],ol[7]);
+				fprintf(fpo,"%s\t%s\t%u\t%u\t%u;%u\n",line+1,toPrint,foundUniq,uix,sl,ol); 
+					//,sl[1],ol[1],sl[2],ol[2],sl[3],ol[3],sl[4],ol[4],sl[5],ol[5],sl[6],ol[6],sl[7],ol[7]);
 			}
 			//fprintf(fpo,"\n");
 			XT_FINALIZE_WS()
@@ -1488,7 +1347,7 @@ int UT_writeTreeBinary(UTree *utree, char* filename) {
 	#define DO_GG 0
 #endif
 // usage: RadixalTriecrobium [see module usage]
-#define VER "[v2.0 SigNature Edition]"
+#define VER "[v2.0RF SigNature Edition]"
 int main(int argc, char *argv[]) { 
 	#ifdef COMPRESS
 	if (argc != 3) {puts(VER " usage: xtree-compress preTree.ubt compTree.ctr"); exit(1); }

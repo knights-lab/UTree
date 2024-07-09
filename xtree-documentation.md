@@ -205,7 +205,7 @@ Ref2    Bacteria;Firmicutes;Bacilli;Bacillales;Bacillaceae;Bacillus;Bacillus sub
 The k-mer size (`-k` option) affects sensitivity and specificity:
 - Longer k-mers: More specific but less sensitive
 - Shorter k-mers: More sensitive but less specific
-- Default: 29 (balances specificity and sensitivity)
+- Default: 29 (optimizes specificity; consider using 21 for sensitivity)
 
 ### Log Output Option (`--log-out`)
 

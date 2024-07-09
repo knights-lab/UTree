@@ -122,5 +122,5 @@ When using the --log-out option in BUILD mode, XTree generates a tab-delimited l
 
 Note: Column 6, AdamantineKmers (WeakKmers), counts k-mers that are unique to this reference but lose their uniqueness under mutation. The truly "adamantine" k-mers, those remaining unique even after mutation, would be the difference between UniqKmers and WeakKmers.
 
-The BUILD log gives some insight into each ref's uniqueness / robustness within the database which understand pitfalls in read assignment during the ALIGN phase.
+The BUILD log gives some insight into each ref's uniqueness / robustness within the database which elucidate pitfalls in read assignment during the ALIGN phase.
 

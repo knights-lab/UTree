@@ -1,0 +1,88 @@
+XTree readme
+
+XTree (or "CrossTree") is a fast, k-mer-based sequence lookup and tallying tool. It is capable of (total and unique) genome coverage analysis, maximum-likelihood read re-distribution, cross-tabulation of two annotation heirarchies (i.e. taxonomy and function), and per-query annotation and statistics. It can report and multiple granularities: per-reference (genome-level), per-rank (redistributed), or per-rank (LCA [lowest common ancestor]). It can output all of these tabulations simultaneously in one run. It is extremely fast, often reaching 10-100x the speed of alignment. It supports standard-in, compressed files, and both fasta and fastq formats. 
+
+CrossTree v0.92d by Gabe
+USAGE: xtree {BUILD,ALIGN} [options]
+  Options for both BUILD and ALIGN, with args: {seqs,log-out,threads,db}
+BUILD Options
+  With args: {map,comp,k,db-out} <arg>
+ALIGN Options
+  With args: {confidence,perq-out,ref-out,tax-out,cov-out,orthog-out}
+  Without args: {redistribute,shallow-lca}
+  
+  
+Options are not positional (that is, they are parsed regardless of the order in which they are specified):
+
+------------
+BUILD mode. This mode is used to build an xtree database. Ideally, you would want to include both a tab-separated taxonomy file and a reference FASTA file (linearized! Meaning exactly one line per header and exactly one subsequent line for the entire sequence, followed by another line for the next header, one line after that for its entire sequence, and so on -- NO WORD WRAP OR BLOCKS OF SEQUENCE). The easiest way to create compliant reference files is to use lingenome, which can run on a directory of fasta files formatted however you like and create single genome entries for all of them in one combined fasta file.
+
+The arguments for build mode are --seqs, --log-out, --threads, and --db[-out] (that is, --db and --db-out mean the same thing here and you can use either interchangeably).
+
+seqs: The linearized fasta of reference sequences you want to align against, in the format specified above.
+
+log-out: A text file that will be written to with information on the distribution of unique k-mers identified for each sequence. 
+    Note: Don't worry if the number looks small (or even 0); xtree stores ALL APPLICABLE KMERS, NOT JUST THE UNIQUE ONES and can often find a unique reference even when none of its k-mers are themselves unique (that is, if the COMBINATION of k-mers found in a query are unique, it can still identify a unique reference for them).
+
+threads: the number of threads to use during database build. Set this, ideally, to the number of PHYSICAL (not logical) cores on your machine.
+
+db (or db-out): The actual .xtr database that is output by xtree after building the database. This is the file to use later to align against, and you can discard the original fasta sequence if you like. 
+
+map: this is the taxonomic annotation (or some other heirarchy) of each the reference sequences. The format is a tab-delimited file containing 2 or 3 columns. The first column must be the exact name of the reference sequence for which the proceeding taxonomy would apply. It doesn't contain the ">" character. It doesn't contain an additional file extension (.fna.gz or whatever). If you used lingenome to make a combined fasta file out of a directory of genomes, then the names in this column would be the name of each of the fasta files in the original directory (again, without the extentions like .fa.gz or .fna). The second column must be a SEMICOLON-DELIMITED list of strings denoting the taxonomic (or other heirarchical) ranks, starting from most general to most specific. It doesn't matter how many ranks there are, and it doesn't matter if different sequences have different numbers of ranks. The third column is optional and may specify another taxonomic (or other heirarchical) ranking in the same format as the second column, for use in cross-tabulation or multiple-heirarchy reporting.
+
+comp: Compression mode. For small marker-gene databases, leave as-is, but for large (i.e. whole-genome databases) it is STRONGLY recommended to set this to 2. Essentially, this is a (lossy) compression scheme. The larger the compression mode value, the smaller the database, but the less sensitive it becomes (specificity is largely unaffected). 2 is a good balance that is very similar (95%+) to uncompressed for whole-genome databases being aligned to by large short-read datasets. 
+
+k: This is the k-mer size used internally to store and search pieces of references and queries. It's a tradeoff of sensitivity and specificity of alignment. Longer k-mers are more specific but less sensitive, and vice versa. The default (29) fairly specific but sensitive enough in most circumstances, but if you are having trouble detecting more remote alignments, you can lower this (i.e. to 20). 
+
+-------------
+ALIGN mode. This is the main usage mode for xtree. It requires an xtr database either supplied with the program or built according to the BUILD instructions above, and a list of queries to align against that reference to produce the desired output files. You can specify multiple output types to have xtree produce files for each output type during the same run, i.e. --perq-out perq.tsv --tax-out taxa.tsv --ref-out refs.tsv
+
+seqs: Your query sequences you wish to align against the references contained in the xtr database. These can be in fasta or fastq format, in gz or not. Note: if they are in fasta format, make sure they are linearized according to the instructions in BUILD mode above -- no linebreaks are allowed within the sequences. The queries may be whole genomes, contigs, short reads, whatever. But they can't be over 100MB long, so leave large eukaryotic chromosomes out of this or split them up.
+
+threads: the number of threads to use during alignment. Here, unlike for BUILD, you would probably benefit from using as many threads as your system has, whether they are physical or otherwise. Alignment takes advantage of hyperthreading.
+
+db: The xtr database supplied with the program or built yourself using the "BUILD" mode above. 
+
+redistribute: Apply a maximum-likelihood algorithm to assign ambiguously mapping query sequences to the most likely reference sequence or taxonomy based on the downstream profile of mapped reads. This uses a multi-pass CAPITALIST algorithm (similar to that of the BURST tool). Notes: Particularly in short read datasets, many reads contain too little information to uniquely match any particular reference sequence or fine-grained taxonomic level (i.e. species). With --redistribute, rather than discard these sequences or demote them to a broader/more ambiguous rank, xtree will instead try to assign them to the most appropriate specific reference sequence or taxon based on where the rest of the query sequences in the dataset tend to go, additionally incorporating information about all the best potential matches for each query to guide it to its destination. 
+
+confidence: An internal pseudo-confidence level for assigning LCA taxonomy (does not apply to other output modes, or when --redistribute is specified). The scale is from 0-1, lowest to most confident. However, the interpretability of this scale is not straightforward with user expectation of "statistical confidence". Essentially, 0.25 represents a statistical confidence of ~80% at a compression level of 2; 0.5 represents 95%+; and 0.125 represents ~50%). It is recommended (if LCA is used) to use 0.25 on whole-genome databases. 
+   Note: It is likely that this mode will be restructured in the future to match up with "common sense" confidence (i.e. specifiying 0.80 will mean 80% confidence). 
+
+perq-out: Produce an output file containing one line of output for EVERY INDIVIDUAL QUERY SEQUENCE including that query sequence's closest-matched reference sequence, LCA taxonomy, and k-mer statistics. This is most useful when trying to assign reference membership or taxonomy to individual contigs, long-reads, or genomes. The columns will be: 1=Query sequence name; 2=Reference sequence name; 3=k-mers matched at assigned taxonomic level in the form [most matched; other matched]; 4=LCA taxonomy at the confidence specified via --confidence; 5=total k-mers matched (may be greater than sum of k-mers per rank if more k-mers were matched than at assigned rank; may be less if some k-mers matched multiple taxa)
+
+ref-out: Produce a tabulated summary of the reference sequences matched to by all the query sequences, in aggregate. It will contain 2 columns: 1=Reference sequence name; 2=Total number of query sequences that matched that reference. Note: sequences that matched more than one reference will not be counted twice; either they are assigned the first matching reference (if --redistribute is not used) or the overall most-likely reference (if --redistribute is used).
+
+tax-out: Similar to ref-out above, but the first column is taxonomy instead of reference sequence. If --redistribute is used, only full-rank taxa will appear (or as specified in the map file used to make the DB). If --redistribute is not used, the LCA algorithm is applied whenever a query sequence matches multiple taxa at the chosen level of confidence (see --confidence), and lines listing broader-ranked taxa will appear in the file to collect these queries that couldn't be confidently assigned to a single more-specific taxon. 
+
+cov-out: Produce a coverage statistics file that shows the distribution of query sequences across the reference sequences. Columns: 1=Reference sequence name; 2=total k-mers that mapped to this reference among all query sequences; 3=Unique k-mers (k-mers that only appear in this reference sequence) that mapped to this reference among all query sequences; 4=number of k-mers in the reference sequence that experienced at least one matching k-mer from a query sequence; 5=same as #4 but unique k-mers within that reference sequence; 6=decimal fraction of the reference sequence that experienced at least one matching k-mer from a matching read; 7=same as #6 but unique k-mers within that reference sequence; 7=# of query sequences (not k-mers) that piled up onto the reference sequence. Note that for the coverage report, a single query sequence can produce k-mer matches to multiple references. 
+
+orthog-out: Produce a file similar to the tax-out file, but with an additional column for a second heirarchy. The last column lists the total counts in common between both heirarchies. Hence, one heirarchy is summarized/collapsed by the other. An example is if you supply both taxonomy and functional heirarchies, xtree will separately tally which functions are produced by which taxa (e.g. bug A [tab] function B [tab] count). This gives a "per-taxon" functional summarization.  Note: this mode has not been tested much.
+
+shallow-lca: Speed option. Enabling this may speed up the LCA calculation in certain cases. Not recommended for general use. 
+
+--------------------
+Output formats:
+- perq-out mode produces a tab-delimited file with the following header fields:
+  1. Query name (fasta header)
+  2. Reference name (fasta header)
+  3. Number of k-mers in best hit, number of k-mers in second-best hit, comma delimited in square brackets
+  4. Best hit's level id (internal ID of matched sequence in tree), for debugging or db xref
+  5. Best hit's taxonomic string (if xtr database was built with supplied taxonomy via BUILD's --map, second column)
+  6. Best hit's level 2 level id (internal ID of matched sequence in tree), for debugging or db xref
+  7. Best hit's level 2 taxonomic string (if xtr database was built with supplied taxonomy via BUILD's --map, third column)
+  8. Total number of k-mers matching across references
+- ref-out mode produces a tab-delimited file containing the reference (fasta header) and count
+- tax-out mode produces a tab-delimited file containing the taxonomies:
+  * The taxonomy calls using column 3 of the BUILD "--map" file are output first, followed by those using column 4 of the BUILD --map file.
+  * If --redistribute is used, the taxa will not be truncated to a lowest-common ancestor. Otherwise, truncation is performed by semicolon
+- cov-out mode produces a tab-delimited table with headers. The columns are: 
+*******Reference	Kmers_found	Unique_kmers_found	Kmers_covered	Unique_kmers_covered	Proportion_covered	Unique_proportion_covered	Reads_covered
+  1. Reference (fasta header)
+  2. number of k-mers found for that reference (total, not unique)
+  3. unique number of k-mers found for that reference. duplicates are allowed, but k-mers only count if they covered a unique portion of the reference not present in other references
+  4. out of the total number of k-mers present in the index for that reference, what number have at least 1 match (duplicates outside of that reference are allowed only up to the number of duplicates actually present in the reference index)
+  5. Out of the unique k-mers present in the index for that reference, what number have at least 1 match
+  6. Proportion of the reference's k-mers covered by all matching queries (to get percentage, multiply by 100. Range 0-1)
+  7. Proportion of the reference's unique k-mers covered by all matching queries (Range 0-1). 
+  8. Number of distinct query reads that matched to that reference (duplicates and multiple-mappings are allowed)
+

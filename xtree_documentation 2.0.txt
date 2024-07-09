@@ -110,3 +110,17 @@ Output formats:
   * The taxonomy calls using column 3 of the BUILD "--map" file are output first, followed by those using column 4 of the BUILD --map file.
   * If --redistribute is used, the taxa will not be truncated to a lowest-common ancestor. Otherwise, truncation is performed by semicolon
 - cov-out mode produces a tab-delimited table with headers as described in the cov-out section above.
+
+When using the --log-out option in BUILD mode, XTree generates a tab-delimited log file with the following columns for each reference sequence:
+
+1. Reference: Name of the reference sequence.
+2. UsableLen: Length of the sequence usable for k-mer generation (total length minus k-1 and ambigs).
+3. TotalKmers: Total number of k-mers in the sequence.
+4. UniqKmers: Number of k-mers unique to this sequence within the entire database.
+5. UniqKmers_SC: Number of k-mers unique to this sequence, including those appearing multiple times within it.
+6. AdamantineKmers (WeakKmers): Number of initially unique k-mers that become non-unique when considering single-nucleotide mutations.
+
+Note: Column 6, AdamantineKmers (WeakKmers), counts k-mers that are unique to this reference but lose their uniqueness under mutation. The truly "adamantine" k-mers, those remaining unique even after mutation, would be the difference between UniqKmers and WeakKmers.
+
+The BUILD log gives some insight into each ref's uniqueness / robustness within the database which understand pitfalls in read assignment during the ALIGN phase.
+

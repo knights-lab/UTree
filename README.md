@@ -1,3 +1,9 @@
+# XTree
+Just wanted to update here that my redesign and reimplementation of UTree, XTree has migrated to its own repo along with my collaborators at 2FP! 
+
+https://github.com/two-frontiers-project/2FP-XTree
+
+
 # UWho?
 UTree is an ultra-fast (up to 2x faster than Kraken) metagenomic profiling tool. Its database and RAM usage is an order of magnitude smaller than Kraken's, and it has greater specifity/precision with comparable recall after Bracken-like redistribution of lower-rank hits. It is distributed as a single static binary on Linux (and compiles for Mac and Windows) with no dependencies. It has a flexible compression parameter that allows the user to tune the size of the database at the expense of precision and recall. On a RefSeq representative genomes database containing over 5,000 prokaryotic genomes and over 7,000 viruses, the highest-compressed (L4) database consumes 500MB of memory and storage, making it feasible to run on a mobile device or phone, including running on long-read sequence data. The standard-compressed database (L2) of the same takes under 8GB of storage and RAM during alignment, and assigns dynamically interpolated taxonomy to reads at the rate of 16 million reads per minute on a 32-core Ivy Bridge server, or ~2 million reads per minute on an 8GB RAM Macbook Air. 
 
